@@ -1,0 +1,18 @@
+# Habilitar reescritura
+RewriteEngine On
+
+# Responder a peticiones OPTIONS con 200
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ auth.php [L]
+
+# Redirigir /auth/registro a auth.php
+RewriteRule ^auth/registro$ auth.php [L,QSA]
+
+# Redirigir /auth/login a auth.php
+RewriteRule ^auth/login$ auth.php [L,QSA]
+
+# Redirigir /auth/logout a auth.php
+RewriteRule ^auth/logout$ auth.php [L,QSA]
+
+# Redirigir /auth/me a auth.php
+RewriteRule ^auth/me$ auth.php [L,QSA]

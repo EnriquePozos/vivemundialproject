@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, User, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import authService from '../config/api';
 
 const Login = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -8,17 +9,40 @@ const Login = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isLogin) {
-      console.log('Login:', { email, password });
-      // Llamar función del App.jsx para cambiar de página
-      onLogin({ email, username: email.split('@')[0] });
-    } else {
-      console.log('Registro:', { username, email, password, confirmPassword });
-      // También llamar función del App.jsx
-      onLogin({ email, username });
+    setError('');
+    setLoading(true);
+
+    try {
+      let response;
+      
+      if (isLogin) {
+        // Login
+        response = await authService.login(email, password);
+        console.log('Login exitoso:', response);
+        onLogin({ email, username: response.data.usuario.nombre_Usuario });
+      } else {
+        // Validar que las contraseñas coincidan
+        if (password !== confirmPassword) {
+          setError('Las contraseñas no coinciden');
+          setLoading(false);
+          return;
+        }
+        
+        // Registro
+        response = await authService.registro(username, email, password);
+        console.log('Registro exitoso:', response);
+        onLogin({ email, username });
+      }
+    } catch (err) {
+      setError(err.message || 'Error al procesar la solicitud');
+      console.error('Error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -45,8 +69,16 @@ const Login = ({ onLogin }) => {
             </p>
           </div>
 
+          {/* Error Alert */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+
           {/* Formulario */}
-          <div className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -56,7 +88,7 @@ const Login = ({ onLogin }) => {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 text-gray-800 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
+                  required={!isLogin}
                 />
               </div>
             )}
@@ -82,6 +114,7 @@ const Login = ({ onLogin }) => {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-10 pr-12 py-3 text-gray-800 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
+                minLength={6}
               />
               <button
                 type="button"
@@ -101,22 +134,24 @@ const Login = ({ onLogin }) => {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 text-gray-800 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
+                  required={!isLogin}
+                  minLength={6}
                 />
               </div>
             )}
 
             <button
-              onClick={handleSubmit}
+              type="submit"
+              disabled={loading}
               className={`w-full py-3 px-4 rounded-lg font-semibold text-white transition-all duration-200 ${
                 isLogin 
                   ? 'bg-blue-600 hover:bg-blue-700' 
                   : 'bg-green-600 hover:bg-green-700'
-              }`}
+              } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'}
+              {loading ? 'Procesando...' : (isLogin ? 'Iniciar Sesión' : 'Crear Cuenta')}
             </button>
-          </div>
+          </form>
 
           {/* Toggle entre Login/Registro */}
           <div className="mt-6 text-center">
@@ -125,7 +160,14 @@ const Login = ({ onLogin }) => {
             </p>
             <button
               type="button"
-              onClick={() => setIsLogin(!isLogin)}
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setError('');
+                setEmail('');
+                setPassword('');
+                setUsername('');
+                setConfirmPassword('');
+              }}
               className={`mt-2 font-semibold transition-colors duration-200 ${
                 isLogin 
                   ? 'text-green-600 hover:text-green-700' 

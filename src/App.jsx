@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Login from './components/login';
+import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import PrivateChat from './components/PrivateChat';
 
