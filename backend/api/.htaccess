@@ -16,3 +16,6 @@ RewriteRule ^auth/logout$ auth.php [L,QSA]
 
 # Redirigir /auth/me a auth.php
 RewriteRule ^auth/me$ auth.php [L,QSA]
+
+# Redirigir /perfil a perfil.php
+RewriteRule ^perfil$ perfil.php [L,QSA]

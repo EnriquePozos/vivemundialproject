@@ -1,9 +1,12 @@
 <?php
-// Headers CORS - ÚNICOS Y SUFICIENTES
-header("Access-Control-Allow-Origin: http://localhost:5173");
+/**
+ * API de Autenticación
+ */
+
+// Headers CORS - Permitir cualquier origen para túneles
+header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, GET, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
-header("Access-Control-Allow-Credentials: true");
 header("Content-Type: application/json; charset=UTF-8");
 
 // Manejar peticiones OPTIONS (preflight CORS)

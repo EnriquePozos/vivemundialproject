@@ -1,5 +1,5 @@
 // Configuración de la API
-const API_BASE_URL = 'http://localhost/POI/vivemundialproject/vivemundialproject/backend/api';
+const API_BASE_URL = 'https://uneroded-forest-untasked.ngrok-free.dev/POI/vivemundialproject/vivemundialproject/backend/api';
 
 // Endpoints
 export const API_ENDPOINTS = {
@@ -9,7 +9,6 @@ export const API_ENDPOINTS = {
     LOGOUT: `${API_BASE_URL}/auth/logout`,
     ME: `${API_BASE_URL}/auth/me`,
   },
-  // Aquí agregaremos más endpoints después
 };
 
 // Función para hacer peticiones con token
@@ -48,7 +47,6 @@ export const authService = {
       body: JSON.stringify({ nombre_Usuario, Correo, Contrasenia }),
     });
 
-    // Guardar token en localStorage
     if (data.data.token) {
       localStorage.setItem('token', data.data.token);
       localStorage.setItem('usuario', JSON.stringify(data.data.usuario));
@@ -64,7 +62,6 @@ export const authService = {
       body: JSON.stringify({ Correo, Contrasenia }),
     });
 
-    // Guardar token en localStorage
     if (data.data.token) {
       localStorage.setItem('token', data.data.token);
       localStorage.setItem('usuario', JSON.stringify(data.data.usuario));
@@ -79,7 +76,6 @@ export const authService = {
       method: 'POST',
     });
 
-    // Limpiar localStorage
     localStorage.removeItem('token');
     localStorage.removeItem('usuario');
 
