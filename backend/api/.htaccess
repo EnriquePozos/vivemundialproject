@@ -19,3 +19,10 @@ RewriteRule ^auth/me$ auth.php [L,QSA]
 
 # Redirigir /perfil a perfil.php
 RewriteRule ^perfil$ perfil.php [L,QSA]
+
+# Redirigir endpoints de chats
+RewriteRule ^chats/crear$ chats.php [L,QSA]
+RewriteRule ^chats/mis-chats$ chats.php [L,QSA]
+RewriteRule ^chats/info$ chats.php [L,QSA]
+RewriteRule ^chats/mensajes$ chats.php [L,QSA]
+RewriteRule ^chats/enviar$ chats.php [L,QSA]
