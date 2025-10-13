@@ -16,6 +16,9 @@ export const API_ENDPOINTS = {
     MENSAJES: `${API_BASE_URL}/chats/mensajes`,
     ENVIAR: `${API_BASE_URL}/chats/enviar`,
   },
+  USUARIOS: { // NUEVO: Endpoint de usuarios
+    TODOS: `${API_BASE_URL}/perfil/todos`,
+  },
 };
 
 // Función para hacer peticiones con token
@@ -169,6 +172,14 @@ export const chatService = {
       }),
     });
   },
+};
+
+//Servicio para usuarios
+export const userService = {
+  // Obtener todos los usuarios (excluyendo al usuario actual)
+  obtenerTodos: async () => {
+    return await fetchWithAuth(API_ENDPOINTS.USUARIOS.TODOS);
+  }
 };
 
 export default authService;

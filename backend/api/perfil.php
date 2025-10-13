@@ -1,7 +1,7 @@
 <?php
 /**
  * API de Perfil de Usuario (PROTEGIDA)
- * Endpoint: /api/perfil
+ * Endpoint: /api/perfil y /api/perfil/todos
  */
 
 header("Access-Control-Allow-Origin: *");
@@ -18,6 +18,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once __DIR__ . '/../middlewares/AuthMiddleware.php';
 require_once __DIR__ . '/../utils/Response.php';
 
+// --- NUEVAS INCLUSIONES ---
+require_once __DIR__ . '/../config/database.php'; 
+require_once __DIR__ . '/../models/Usuario.php'; 
+// --------------------------
+
 // Obtener el método HTTP
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -29,13 +34,40 @@ if ($method !== 'GET') {
 // USAR EL MIDDLEWARE - Verificar autenticación
 $id_Usuario = AuthMiddleware::verificarToken();
 
-// Si llegamos aquí, el usuario está autenticado
-// Obtener datos del usuario
-$usuario = AuthMiddleware::obtenerUsuario($id_Usuario);
+// Determinar si la petición es para obtener todos los usuarios
+$request_uri = $_SERVER['REQUEST_URI'];
+// Usamos strpos para ver si la URL contiene '/perfil/todos'
+$is_all_users_request = strpos($request_uri, '/perfil/todos') !== false;
 
-if ($usuario) {
-    Response::success($usuario, "Perfil obtenido exitosamente");
+// --- LÓGICA: OBTENER TODOS LOS USUARIOS ---
+if ($is_all_users_request) {
+    $database = new Database();
+    $db = $database->getConnection();
+    $usuario_model = new Usuario($db);
+
+    // Obtener todos los usuarios de la base de datos
+    $usuarios = $usuario_model->obtenerTodos();
+
+    // Filtrar al usuario actual de la lista para que no se pueda agregar a sí mismo
+    $usuarios_filtrados = array_filter($usuarios, function($u) use ($id_Usuario) {
+        return $u['id_Usuario'] != $id_Usuario;
+    });
+
+    // Reindexar el array para asegurar un JSON válido para el frontend
+    $usuarios_filtrados = array_values($usuarios_filtrados);
+
+    Response::success($usuarios_filtrados, "Lista de usuarios obtenida exitosamente");
+
 } else {
-    Response::error("Usuario no encontrado", 404);
+// --- LÓGICA ORIGINAL para /perfil ---
+
+    // Obtener datos del usuario
+    $usuario = AuthMiddleware::obtenerUsuario($id_Usuario);
+
+    if ($usuario) {
+        Response::success($usuario, "Perfil obtenido exitosamente");
+    } else {
+        Response::error("Usuario no encontrado", 404);
+    }
 }
 ?>

@@ -29,7 +29,7 @@ import {
   FileText,
   Mic,
 } from "lucide-react";
-import { API_ENDPOINTS, chatService } from "../config/api";
+import { API_ENDPOINTS, chatService, userService } from "../config/api"; // <--- MODIFICACIÓN: Importamos userService
 
 // Componente de Chat Privado integrado
 const PrivateChat = ({ chatData, onBack, currentUserId }) => {
@@ -378,6 +378,7 @@ const Dashboard = ({ onLogout }) => {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [userName, setUserName] = useState("Usuario");
   const [userPoints, setUserPoints] = useState(0);
+  const [allUsers, setAllUsers] = useState([]); // <--- NUEVO: Estado para todos los usuarios de la DB
 
   const shopRef = useRef(null);
 
@@ -480,6 +481,50 @@ const Dashboard = ({ onLogout }) => {
     loadChats();
   }, []);
 
+  // NUEVO: Cargar todos los usuarios para el modal de nuevo chat
+  useEffect(() => {
+    loadAllUsers();
+  }, []);
+
+  // Nueva función para cargar todos los usuarios
+  const loadAllUsers = async () => {
+    try {
+      // Verificar token antes de hacer la petición
+      const token = localStorage.getItem("token");
+      if (!token) {
+        console.warn(
+          "⚠️ No hay token, no se puede cargar la lista de usuarios"
+        );
+        return;
+      }
+
+      console.log("📥 Cargando lista de usuarios...");
+      const response = await userService.obtenerTodos(); // Usamos el nuevo servicio
+
+      if (response.success) {
+        console.log("✅ Lista de usuarios cargada:", response.data);
+        // La API devuelve un array de objetos con las propiedades del modelo Usuario
+        setAllUsers(response.data);
+      } else {
+        console.warn("⚠️ Error al cargar usuarios:", response);
+        // Solo mostramos el error si no hay chats
+        if (chats.length === 0) {
+          showAlertMessage(
+            "Error al cargar la lista de usuarios para nuevos chats"
+          );
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error al cargar usuarios:", error);
+      // Solo mostramos el error si no hay chats
+      if (chats.length === 0) {
+        showAlertMessage(
+          "Error al cargar la lista de usuarios: " + error?.message
+        );
+      }
+    }
+  };
+
   const loadChats = async () => {
     try {
       setLoadingChats(true);
@@ -526,15 +571,6 @@ const Dashboard = ({ onLogout }) => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  // Mock de usuarios disponibles para crear chat
-  const availableUsers = [
-    { id: 1, name: "Ana García", online: true, avatar: "👩" },
-    { id: 2, name: "Carlos López", online: false, avatar: "👨" },
-    { id: 3, name: "María Rodríguez", online: true, avatar: "👱‍♀️" },
-    { id: 4, name: "Juan Pérez", online: true, avatar: "👨‍💼" },
-    { id: 5, name: "Laura Martínez", online: false, avatar: "👩‍💻" },
-  ];
 
   // Mock de iconos de la tienda
   const shopIcons = [
@@ -717,38 +753,47 @@ const Dashboard = ({ onLogout }) => {
                   Selecciona usuarios
                 </label>
                 <div className="max-h-60 overflow-y-auto space-y-2 border border-gray-200 rounded-lg p-3">
-                  {availableUsers.map((user) => (
-                    <button
-                      key={user.id}
-                      onClick={() => toggleUserSelection(user.id)}
-                      className={`w-full p-3 rounded-lg text-left transition-colors flex items-center justify-between ${
-                        selectedUsers.includes(user.id)
-                          ? "bg-blue-100 border-2 border-blue-500"
-                          : "bg-gray-50 border-2 border-transparent hover:bg-gray-100"
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                          <span className="text-white">{user.avatar}</span>
-                        </div>
-                        <div>
-                          <div className="font-medium text-gray-800">
-                            {user.name}
+                  {/* REEMPLAZO DEL MOCK: Usar `allUsers` de la API */}
+                  {allUsers.length === 0 ? (
+                    <p className="text-center text-gray-500 py-4">
+                      Cargando usuarios o no hay más usuarios disponibles...
+                    </p>
+                  ) : (
+                    allUsers.map((user) => (
+                      <button
+                        key={user.id_Usuario} // Usar id_Usuario de la API
+                        onClick={() => toggleUserSelection(user.id_Usuario)}
+                        className={`w-full p-3 rounded-lg text-left transition-colors flex items-center justify-between ${
+                          selectedUsers.includes(user.id_Usuario)
+                            ? "bg-blue-100 border-2 border-blue-500"
+                            : "bg-gray-50 border-2 border-transparent hover:bg-gray-100"
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                            <span className="text-white text-lg">👤</span>
                           </div>
-                          <div
-                            className={`text-xs ${
-                              user.online ? "text-green-600" : "text-gray-500"
-                            }`}
-                          >
-                            {user.online ? "En línea" : "Desconectado"}
+                          <div>
+                            <div className="font-medium text-gray-800">
+                              {user.nombre_Usuario}
+                            </div>{" "}
+                            {/* Usar nombre_Usuario */}
+                            <div
+                              className={`text-xs ${
+                                user.Estado ? "text-green-600" : "text-gray-500"
+                              }`}
+                            >
+                              {user.Estado == 1 ? "En línea" : "Desconectado"}{" "}
+                              {/* Usar Estado de la API */}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      {selectedUsers.includes(user.id) && (
-                        <CheckCircle className="w-5 h-5 text-blue-600" />
-                      )}
-                    </button>
-                  ))}
+                        {selectedUsers.includes(user.id_Usuario) && (
+                          <CheckCircle className="w-5 h-5 text-blue-600" />
+                        )}
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -797,16 +842,6 @@ const Dashboard = ({ onLogout }) => {
   return (
     <div className="min-h-screen bg-gray-50">
       <Alert />
-
-      {/* Panel de Debug (temporal - remover en producción) */}
-      {/*<div className="fixed bottom-4 left-4 bg-black bg-opacity-90 text-white p-4 rounded-lg text-xs max-w-md z-50">
-        <div className="font-bold mb-2">🔧 Debug Info:</div>
-  <div>API Endpoint (chats.mis-chats): {API_ENDPOINTS.CHATS.MIS_CHATS}</div>
-        <div>Token: {localStorage.getItem('token') ? '✅ Presente' : '❌ No disponible'}</div>
-        <div>User ID: {currentUserId || 'No cargado'}</div>
-        <div>Chats: {chats.length} encontrados</div>
-        <div>Loading: {loadingChats ? 'Sí' : 'No'}</div>
-      </div>*/}
 
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
