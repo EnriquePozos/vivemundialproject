@@ -19,8 +19,11 @@ require_once __DIR__ . '/../utils/Response.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 $request_uri = $_SERVER['REQUEST_URI'];
-$path_parts = explode('/', trim($request_uri, '/'));
+
+$uri_without_query = strtok($request_uri, '?');
+$path_parts = explode('/', trim($uri_without_query, '/'));
 $action = end($path_parts);
+
 
 $controller = new ChatController();
 
