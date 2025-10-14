@@ -30,10 +30,21 @@ import {
   Mic,
 } from "lucide-react";
 import { API_ENDPOINTS, chatService, userService } from "../config/api"; // <--- MODIFICACIÓN: Importamos userService
-import { useSocket } from '../hooks/useSocket';
+import { useSocket } from "../hooks/useSocket";
 
 // Componente de Chat Privado integrado
-const PrivateChat = ({ chatData, onBack, currentUserId, isConnected, joinChat, leaveChat, sendSocketMessage, onMessageReceived, offMessageReceived }) => {
+const PrivateChat = ({
+  chatData,
+  onBack,
+  currentUserId,
+  userName,
+  isConnected,
+  joinChat,
+  leaveChat,
+  sendSocketMessage,
+  onMessageReceived,
+  offMessageReceived,
+}) => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [encryptionEnabled, setEncryptionEnabled] = useState(false);
@@ -47,110 +58,260 @@ const PrivateChat = ({ chatData, onBack, currentUserId, isConnected, joinChat, l
     }
   }, [chatData?.id_Chat]);
 
-  const loadMessages = async () => {
-    try {
-      setLoading(true);
-      console.log(
-        "🔍 currentUserId:",
-        currentUserId,
-        "Tipo:",
-        typeof currentUserId
-      );
+  useEffect(() => {
+  if (chatData?.id_Chat && isConnected) {
+    console.log('🔗 Uniéndose al chat:', chatData.id_Chat);
+    joinChat(chatData.id_Chat);
 
-      const response = await chatService.obtenerMensajes(chatData.id_Chat, 50);
-      if (response.success) {
-        console.log("📥 Mensajes recibidos del servidor:", response.data);
+    // Cleanup: salir del chat cuando se cierre o cambie
+    return () => {
+      console.log('👋 Saliendo del chat:', chatData.id_Chat);
+      leaveChat(chatData.id_Chat);
+    };
+  }
+}, [chatData?.id_Chat, isConnected]);
 
-        const formattedMessages = response.data.map((msg) => {
-          // Parsear la fecha correctamente desde MySQL
-          let timeString = "";
-          try {
-            // MySQL devuelve fecha en formato: "YYYY-MM-DD HH:mm:ss"
-            // Reemplazar el espacio con 'T' para que sea compatible con Date
-            const dateStr = msg.fecha_Hora.replace(" ", "T");
-            const date = new Date(dateStr);
+// Escuchar mensajes en tiempo real del chat actual
+useEffect(() => {
+  if (!isConnected || !chatData?.id_Chat) return;
 
-            // Verificar si la fecha es válida
-            if (!isNaN(date.getTime())) {
-              timeString = date.toLocaleTimeString("es-ES", {
-                hour: "2-digit",
-                minute: "2-digit",
-              });
-            } else {
-              // Si falla, intentar mostrar solo hora de la cadena original
-              const timePart = msg.fecha_Hora.split(" ")[1]; // "HH:mm:ss"
-              if (timePart) {
-                const [hours, minutes] = timePart.split(":");
-                timeString = `${hours}:${minutes}`;
-              } else {
-                timeString = "--:--";
-              }
-            }
-          } catch (error) {
-            console.error("Error parseando fecha:", error);
-            timeString = "--:--";
-          }
+  console.log('👂 Escuchando mensajes en tiempo real para chat:', chatData.id_Chat);
 
-          // Convertir ambos a número para comparación correcta
-          const remitenteId = parseInt(msg.id_Remitente);
-          const usuarioId = parseInt(currentUserId);
-          const esPropio = remitenteId === usuarioId;
+  const handleNewMessage = (messageData) => {
+    console.log('📨 Mensaje recibido por WebSocket:', messageData);
 
-          console.log(`✉️ Mensaje ${msg.id_Mensaje}:`, {
-            remitente: msg.nombre_Usuario,
-            id_Remitente: msg.id_Remitente,
-            tipo_id_Remitente: typeof msg.id_Remitente,
-            currentUserId: currentUserId,
-            tipo_currentUserId: typeof currentUserId,
-            comparacion: `${remitenteId} === ${usuarioId}`,
-            esPropio: esPropio,
-          });
-
-          return {
-            id: msg.id_Mensaje,
-            sender: msg.nombre_Usuario,
-            message: msg.mensaje,
-            time: timeString,
-            isOwn: esPropio,
-            encrypted: msg.encriptado === 1,
-            tipo: msg.tipo_Mensaje,
-          };
+    // Solo agregar si es del chat actual
+    if (messageData.chatId === chatData.id_Chat) {
+      
+      // Formatear hora
+      let timeString = "";
+      try {
+        const date = new Date(messageData.timestamp);
+        timeString = date.toLocaleTimeString("es-ES", {
+          hour: "2-digit",
+          minute: "2-digit",
         });
-
-        console.log("✅ Mensajes formateados:", formattedMessages);
-        setMessages(formattedMessages);
+      } catch (e) {
+        timeString = "Ahora";
       }
-    } catch (error) {
-      console.error("Error al cargar mensajes:", error);
-    } finally {
-      setLoading(false);
+
+      // =========================================
+      // FORMATO UNIFICADO - IMPORTANTE
+      // =========================================
+      const formattedMessage = {
+        // IDs
+        id: messageData.messageId || Date.now(),
+        id_Mensaje: messageData.messageId || Date.now(),
+        
+        // Contenido del mensaje
+        message: messageData.message,        // ← Para renderizado
+        contenido: messageData.message,      // ← Para compatibilidad
+        
+        // Usuario
+        sender: messageData.senderName,
+        nombre_Usuario: messageData.senderName,
+        
+        // Metadata
+        time: timeString,
+        timeString: timeString,
+        fecha_Hora: messageData.timestamp,
+        
+        // Tipo y estado
+        tipo: messageData.type || 'texto',
+        tipo_Mensaje: messageData.type || 'texto',
+        encrypted: messageData.encrypted || false,
+        cifrado: messageData.encrypted || false,
+        
+        // Identificar si es mensaje propio
+        isOwn: messageData.senderId === currentUserId,
+        id_Usuario: messageData.senderId
+      };
+
+      console.log('📝 Mensaje formateado:', formattedMessage);
+
+      // Agregar el mensaje al estado (evitar duplicados por ID)
+      setMessages(prevMessages => {
+        // Verificar si el mensaje ya existe por ID
+        const exists = prevMessages.some(msg => 
+          msg.id === formattedMessage.id || 
+          msg.id_Mensaje === formattedMessage.id_Mensaje
+        );
+        
+        if (exists) {
+          console.log('⚠️ Mensaje duplicado detectado, no se agrega');
+          return prevMessages;
+        }
+
+        console.log('✅ Agregando mensaje nuevo al estado');
+        return [...prevMessages, formattedMessage];
+      });
     }
   };
+
+  // Registrar el listener
+  onMessageReceived(handleNewMessage);
+
+  // Cleanup
+  return () => {
+    console.log('🧹 Limpiando listener de mensajes del chat:', chatData.id_Chat);
+    offMessageReceived();
+  };
+}, [chatData?.id_Chat, isConnected, currentUserId]);
+
+
+const loadMessages = async () => {
+  try {
+    setLoading(true);
+    console.log("🔍 Cargando mensajes del chat:", chatData.id_Chat);
+    console.log("👤 currentUserId:", currentUserId, "Tipo:", typeof currentUserId);
+
+    const response = await chatService.obtenerMensajes(chatData.id_Chat, 50);
+    
+    if (response.success) {
+      console.log("📥 Mensajes recibidos:", response.data.length, "mensajes");
+
+      const formattedMessages = response.data.map((msg) => {
+        // Parsear la fecha correctamente desde MySQL
+        let timeString = "";
+        try {
+          const dateStr = msg.fecha_Hora.replace(" ", "T");
+          const date = new Date(dateStr);
+          timeString = date.toLocaleTimeString("es-ES", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        } catch (e) {
+          console.warn("Error al parsear fecha:", e);
+          timeString = "Hora desconocida";
+        }
+
+        // =========================================
+        // COMPARACIÓN ARREGLADA CON CONVERSIÓN
+        // =========================================
+        // Convertir ambos a número para comparar correctamente
+        const remitente = Number(msg.id_Remitente);
+        const usuarioActual = Number(currentUserId);
+        const esMio = remitente === usuarioActual;
+
+        // DEBUG: Solo para los primeros 3 mensajes
+        if (msg.id_Mensaje <= response.data[2]?.id_Mensaje) {
+          console.log(`📝 Mensaje ${msg.id_Mensaje}:`);
+          console.log(`   - id_Remitente: ${msg.id_Remitente} (tipo: ${typeof msg.id_Remitente})`);
+          console.log(`   - currentUserId: ${currentUserId} (tipo: ${typeof currentUserId})`);
+          console.log(`   - Convertidos: ${remitente} === ${usuarioActual}`);
+          console.log(`   - ¿Es mío?: ${esMio}`);
+        }
+
+        const formattedMsg = {
+          // IDs
+          id: msg.id_Mensaje,
+          id_Mensaje: msg.id_Mensaje,
+          
+          // Contenido del mensaje
+          message: msg.mensaje,
+          contenido: msg.mensaje,
+          
+          // Usuario
+          sender: msg.nombre_Usuario,
+          nombre_Usuario: msg.nombre_Usuario,
+          
+          // Metadata
+          time: timeString,
+          timeString: timeString,
+          fecha_Hora: msg.fecha_Hora,
+          
+          // Tipo y estado
+          tipo: msg.tipo_Mensaje || 'texto',
+          tipo_Mensaje: msg.tipo_Mensaje || 'texto',
+          encrypted: msg.encriptado === 1 || msg.encriptado === true,
+          cifrado: msg.encriptado === 1 || msg.encriptado === true,
+          
+          // Identificar si es mensaje propio (CONVERSIÓN ARREGLADA)
+          isOwn: esMio,  // ← USANDO LA COMPARACIÓN ARREGLADA
+          id_Usuario: msg.id_Remitente,
+          id_Remitente: msg.id_Remitente
+        };
+
+        return formattedMsg;
+      });
+
+      setMessages(formattedMessages);
+      console.log("✅ Mensajes cargados y formateados:", formattedMessages.length);
+    } else {
+      console.warn("⚠️ No se pudieron cargar mensajes");
+      setMessages([]);
+    }
+  } catch (error) {
+    console.error("❌ Error al cargar mensajes:", error);
+    setMessages([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Scroll automático al último mensaje
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = async () => {
-    if (message.trim()) {
-      try {
-        await chatService.enviarMensaje(
-          chatData.id_Chat,
-          message,
-          encryptionEnabled,
-          "texto"
-        );
+ const sendMessage = async () => {
+  if (!message.trim()) {
+    console.warn('⚠️ Mensaje vacío, no se envía');
+    return;
+  }
 
-        // Recargar mensajes después de enviar
-        await loadMessages();
-        setMessage("");
-      } catch (error) {
-        console.error("Error al enviar mensaje:", error);
-        alert("Error al enviar el mensaje");
-      }
+  if (!chatData?.id_Chat || !currentUserId) {
+    console.error('❌ Faltan datos necesarios');
+    alert('Error: No se puede enviar el mensaje');
+    return;
+  }
+
+  const messageToSend = message.trim();
+  setMessage(""); // Limpiar input inmediatamente
+
+  try {
+    console.log('📤 Enviando mensaje...');
+
+    // 1. Guardar en base de datos
+    const response = await chatService.enviarMensaje(
+      chatData.id_Chat,
+      messageToSend,
+      encryptionEnabled,
+      "texto"
+    );
+
+    console.log('✅ Mensaje guardado en BD:', response);
+
+    if (!response || !response.success) {
+      throw new Error('Error al guardar el mensaje');
     }
-  };
+
+    // 2. Emitir por WebSocket
+    if (isConnected) {
+      const messageData = {
+        chatId: chatData.id_Chat,
+        message: messageToSend,
+        senderId: currentUserId,
+        senderName: userName || 'Usuario',
+        messageId: response.data?.id_Mensaje || Date.now(),
+        timestamp: new Date().toISOString(),
+        type: 'texto',
+        encrypted: encryptionEnabled
+      };
+
+      console.log('🔌 Emitiendo por WebSocket:', messageData);
+      sendSocketMessage(messageData);
+    } else {
+      console.warn('⚠️ Socket desconectado, recargando mensajes...');
+      await loadMessages();
+    }
+
+  } catch (error) {
+    console.error("❌ Error al enviar:", error);
+    alert(`Error: ${error.message}`);
+    setMessage(messageToSend); // Restaurar mensaje si falla
+  }
+};
 
   const sendFile = (type) => {
     console.log(`Enviando archivo de tipo: ${type}`);
@@ -237,65 +398,75 @@ const PrivateChat = ({ chatData, onBack, currentUserId, isConnected, joinChat, l
       {/* Contenido - Mensajes */}
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="flex-1 overflow-y-auto p-6">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-gray-500">Cargando mensajes...</div>
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center text-gray-500">
-                <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>No hay mensajes aún</p>
-                <p className="text-sm">Envía el primer mensaje</p>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${
-                    msg.isOwn ? "justify-end" : "justify-start"
-                  }`}
-                >
-                  {/* Contenedor del mensaje con nombre */}
-                  <div className="max-w-xs lg:max-w-md">
-                    {/* Nombre del remitente - Solo si NO es mensaje propio */}
-                    {!msg.isOwn && (
-                      <div className="text-xs text-gray-600 mb-1 ml-2 font-medium">
-                        {msg.sender}
-                      </div>
-                    )}
+         {loading ? (
+  <div className="flex items-center justify-center h-full">
+    <div className="text-gray-500">Cargando mensajes...</div>
+  </div>
+) : messages.length === 0 ? (
+  <div className="flex items-center justify-center h-full">
+    <div className="text-center text-gray-500">
+      <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+      <p>No hay mensajes aún</p>
+      <p className="text-sm">Envía el primer mensaje</p>
+    </div>
+  </div>
+) : (
+  <div className="space-y-4">
+    {messages.map((msg, index) => {
+      // Usar "message" porque ahora todos los mensajes tienen esa propiedad
+      const messageContent = msg.message || msg.contenido || '';
+      const messageSender = msg.sender || msg.nombre_Usuario || 'Usuario';
+      const messageTime = msg.time || msg.timeString || 'Ahora';
+      const messageId = msg.id || msg.id_Mensaje || index;
 
-                    {/* Burbuja del mensaje */}
-                    <div
-                      className={`px-4 py-2 rounded-2xl ${
-                        msg.isOwn
-                          ? "bg-blue-500 text-white"
-                          : "bg-white text-gray-800 border border-gray-200"
-                      }`}
-                    >
-                      {msg.encrypted && (
-                        <div className="flex items-center space-x-1 mb-1">
-                          <Shield className="w-3 h-3" />
-                          <span className="text-xs opacity-75">Cifrado</span>
-                        </div>
-                      )}
-                      <div className="text-sm">{msg.message}</div>
-                      <div
-                        className={`text-xs mt-2 ${
-                          msg.isOwn ? "text-blue-100" : "text-gray-500"
-                        }`}
-                      >
-                        {msg.time}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
+      return (
+        <div
+          key={messageId}
+          className={`flex ${msg.isOwn ? "justify-end" : "justify-start"}`}
+        >
+          <div
+            className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl ${
+              msg.isOwn
+                ? "bg-blue-500 text-white"
+                : "bg-gray-200 text-gray-800"
+            }`}
+          >
+            {/* Nombre del remitente */}
+            {!msg.isOwn && (
+              <div className="text-xs font-semibold mb-1 opacity-75">
+                {messageSender}
+              </div>
+            )}
+            
+            {/* Indicador de cifrado */}
+            {(msg.encrypted || msg.cifrado) && (
+              <div className="flex items-center space-x-1 mb-1">
+                <Shield className="w-3 h-3" />
+                <span className="text-xs opacity-75">Cifrado</span>
+              </div>
+            )}
+            
+            {/* CONTENIDO DEL MENSAJE */}
+            <div className="text-sm break-words whitespace-pre-wrap">
+              {messageContent}
             </div>
-          )}
+            
+            {/* Hora */}
+            <div
+              className={`text-xs mt-1 ${
+                msg.isOwn ? "text-blue-100" : "text-gray-600"
+              }`}
+            >
+              {messageTime}
+            </div>
+          </div>
+        </div>
+      );
+    })}
+    <div ref={messagesEndRef} />
+  </div>
+)}
+          
         </div>
 
         {/* Barra de texto */}
@@ -384,70 +555,98 @@ const Dashboard = ({ onLogout }) => {
   const shopRef = useRef(null);
 
   // Socket.IO - Conexión global al Dashboard
-const { 
-  isConnected, 
-  joinChat, 
-  leaveChat, 
-  sendMessage: sendSocketMessage, 
-  onMessageReceived, 
-  offMessageReceived,
-  onGlobalEvent,
-  offGlobalEvent
-} = useSocket(currentUserId, userName);
+  const {
+    isConnected,
+    isReconnecting, // NUEVO
+    joinChat,
+    leaveChat,
+    sendMessage: sendSocketMessage,
+    onMessageReceived,
+    offMessageReceived,
+    onGlobalEvent,
+    offGlobalEvent,
+  } = useSocket(currentUserId, userName);
 
-// Mostrar estado de conexión en consola
-useEffect(() => {
-  if (isConnected) {
-    console.log('✅ Socket.IO conectado globalmente');
-  } else {
-    console.log('⏳ Socket.IO conectando...');
-  }
-}, [isConnected]);
+  // 1. Mostrar estado de conexión en consola
+  useEffect(() => {
+    if (isConnected) {
+      console.log("✅ Socket.IO conectado globalmente");
+      showAlertMessage("Conectado al servidor en tiempo real");
+    } else if (isReconnecting) {
+      console.log("🔄 Socket.IO reconectando...");
+      showAlertMessage("Reconectando al servidor...");
+    } else {
+      console.log("⏳ Socket.IO desconectado");
+    }
+  }, [isConnected, isReconnecting]);
 
-// Escuchar nuevos mensajes en CUALQUIER chat para actualizar la lista
-useEffect(() => {
-  if (isConnected) {
+  // 2. Escuchar nuevos mensajes en CUALQUIER chat para actualizar la lista
+  useEffect(() => {
+    if (!isConnected) return;
+
+    console.log("👂 Escuchando mensajes globales...");
+
     // Cuando llega un mensaje a cualquier chat
-    onGlobalEvent('message:received', (messageData) => {
-      console.log('📩 Nuevo mensaje recibido en chat:', messageData.chatId);
-      
+    const handleGlobalMessage = (messageData) => {
+      console.log("📩 Nuevo mensaje recibido:", messageData);
+      console.log("   - Chat ID:", messageData.chatId);
+      console.log("   - Mensaje:", messageData.message);
+      console.log("   - Remitente:", messageData.senderName);
+
       // Actualizar el último mensaje del chat en la lista
-      setChats(prevChats => 
-        prevChats.map(chat => 
-          chat.id_Chat === messageData.chatId
-            ? {
-                ...chat,
-                ultimo_mensaje: messageData.message,
-                // Opcionalmente agregar un badge de "no leído"
-                hasUnread: !selectedChat || selectedChat.id_Chat !== messageData.chatId
-              }
-            : chat
-        )
+      setChats((prevChats) =>
+        prevChats.map((chat) => {
+          if (chat.id_Chat === messageData.chatId) {
+            return {
+              ...chat,
+              ultimo_mensaje: messageData.message,
+              // Agregar badge de "no leído" si no es el chat activo
+              hasUnread:
+                !selectedChat || selectedChat.id_Chat !== messageData.chatId,
+              // Actualizar timestamp (opcional)
+              fecha_ultimo_mensaje: new Date().toISOString(),
+            };
+          }
+          return chat;
+        })
       );
-    });
+    };
+
+    onGlobalEvent("message:received", handleGlobalMessage);
 
     // Limpiar el listener al desmontar
     return () => {
-      offGlobalEvent('message:received');
+      console.log("🧹 Limpiando listener de mensajes globales");
+      offGlobalEvent("message:received");
     };
-  }
-}, [isConnected, selectedChat]);
+  }, [isConnected, selectedChat]);
 
-// Escuchar cuando se crea un nuevo chat donde el usuario está incluido
-useEffect(() => {
-  if (isConnected) {
-    onGlobalEvent('chat:created', (newChatData) => {
-      console.log('🆕 Nuevo chat creado:', newChatData);
-      
-      // Recargar la lista de chats
+  // 3. Escuchar cuando se crea un nuevo chat donde el usuario está incluido
+  useEffect(() => {
+    if (!isConnected) return;
+
+    console.log("👂 Escuchando creación de nuevos chats...");
+
+    const handleNewChat = (newChatData) => {
+      console.log("🆕 Nuevo chat creado:", newChatData);
+
+      // Recargar la lista de chats para incluir el nuevo
       loadChats();
-    });
 
-    return () => {
-      offGlobalEvent('chat:created');
+      // Mostrar notificación al usuario
+      showAlertMessage(
+        `Nuevo chat creado: ${newChatData.nombre || "Chat sin nombre"}`
+      );
     };
-  }
-}, [isConnected]);
+
+    onGlobalEvent("chat:created", handleNewChat);
+
+    // Limpiar el listener al desmontar
+    return () => {
+      console.log("🧹 Limpiando listener de nuevos chats");
+      offGlobalEvent("chat:created");
+    };
+  }, [isConnected]);
 
   // Mock de quinielas y tareas (ahora en Dashboard para mostrarse en el sidebar derecho)
   const [quinielas, setQuinielas] = useState([
@@ -907,9 +1106,9 @@ useEffect(() => {
   );
 
   return (
+    
     <div className="min-h-screen bg-gray-50">
       <Alert />
-
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto">
@@ -1116,13 +1315,14 @@ useEffect(() => {
             chatData={selectedChat}
             onBack={handleBackToDashboard}
             currentUserId={currentUserId}
+            userName={userName}
             // Props de Socket.IO
-    isConnected={isConnected}
-    joinChat={joinChat}
-    leaveChat={leaveChat}
-    sendSocketMessage={sendSocketMessage}
-    onMessageReceived={onMessageReceived}
-    offMessageReceived={offMessageReceived}
+            isConnected={isConnected}
+            joinChat={joinChat}
+            leaveChat={leaveChat}
+            sendSocketMessage={sendSocketMessage}
+            onMessageReceived={onMessageReceived}
+            offMessageReceived={offMessageReceived}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">
