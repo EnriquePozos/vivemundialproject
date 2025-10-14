@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = 'http://localhost:3001'; // Cambiar a tu URL de producción
+const SOCKET_URL = 'https://hlrmkghf-3001.usw3.devtunnels.ms/'; // Cambiar a tu URL de producción
 
 export const useSocket = (userId, userName) => {
   const socketRef = useRef(null);
@@ -116,6 +116,19 @@ export const useSocket = (userId, userName) => {
     }
   };
 
+  // NUEVO: Escuchar eventos globales (nuevos chats, notificaciones, etc)
+  const onGlobalEvent = (eventName, callback) => {
+    if (socketRef.current) {
+      socketRef.current.on(eventName, callback);
+    }
+  };
+
+  const offGlobalEvent = (eventName) => {
+    if (socketRef.current) {
+      socketRef.current.off(eventName);
+    }
+  };
+
   return {
     socket: socketRef.current,
     isConnected,
@@ -127,5 +140,7 @@ export const useSocket = (userId, userName) => {
     offMessageReceived,
     notifyTyping,
     notifyStopTyping,
+    onGlobalEvent,      // NUEVO
+    offGlobalEvent,     // NUEVO
   };
 };

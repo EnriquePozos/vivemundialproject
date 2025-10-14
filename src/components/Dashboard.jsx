@@ -30,9 +30,10 @@ import {
   Mic,
 } from "lucide-react";
 import { API_ENDPOINTS, chatService, userService } from "../config/api"; // <--- MODIFICACIÓN: Importamos userService
+import { useSocket } from '../hooks/useSocket';
 
 // Componente de Chat Privado integrado
-const PrivateChat = ({ chatData, onBack, currentUserId }) => {
+const PrivateChat = ({ chatData, onBack, currentUserId, isConnected, joinChat, leaveChat, sendSocketMessage, onMessageReceived, offMessageReceived }) => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [encryptionEnabled, setEncryptionEnabled] = useState(false);
@@ -381,6 +382,72 @@ const Dashboard = ({ onLogout }) => {
   const [allUsers, setAllUsers] = useState([]); // <--- NUEVO: Estado para todos los usuarios de la DB
 
   const shopRef = useRef(null);
+
+  // Socket.IO - Conexión global al Dashboard
+const { 
+  isConnected, 
+  joinChat, 
+  leaveChat, 
+  sendMessage: sendSocketMessage, 
+  onMessageReceived, 
+  offMessageReceived,
+  onGlobalEvent,
+  offGlobalEvent
+} = useSocket(currentUserId, userName);
+
+// Mostrar estado de conexión en consola
+useEffect(() => {
+  if (isConnected) {
+    console.log('✅ Socket.IO conectado globalmente');
+  } else {
+    console.log('⏳ Socket.IO conectando...');
+  }
+}, [isConnected]);
+
+// Escuchar nuevos mensajes en CUALQUIER chat para actualizar la lista
+useEffect(() => {
+  if (isConnected) {
+    // Cuando llega un mensaje a cualquier chat
+    onGlobalEvent('message:received', (messageData) => {
+      console.log('📩 Nuevo mensaje recibido en chat:', messageData.chatId);
+      
+      // Actualizar el último mensaje del chat en la lista
+      setChats(prevChats => 
+        prevChats.map(chat => 
+          chat.id_Chat === messageData.chatId
+            ? {
+                ...chat,
+                ultimo_mensaje: messageData.message,
+                // Opcionalmente agregar un badge de "no leído"
+                hasUnread: !selectedChat || selectedChat.id_Chat !== messageData.chatId
+              }
+            : chat
+        )
+      );
+    });
+
+    // Limpiar el listener al desmontar
+    return () => {
+      offGlobalEvent('message:received');
+    };
+  }
+}, [isConnected, selectedChat]);
+
+// Escuchar cuando se crea un nuevo chat donde el usuario está incluido
+useEffect(() => {
+  if (isConnected) {
+    onGlobalEvent('chat:created', (newChatData) => {
+      console.log('🆕 Nuevo chat creado:', newChatData);
+      
+      // Recargar la lista de chats
+      loadChats();
+    });
+
+    return () => {
+      offGlobalEvent('chat:created');
+    };
+  }
+}, [isConnected]);
 
   // Mock de quinielas y tareas (ahora en Dashboard para mostrarse en el sidebar derecho)
   const [quinielas, setQuinielas] = useState([
@@ -1049,6 +1116,13 @@ const Dashboard = ({ onLogout }) => {
             chatData={selectedChat}
             onBack={handleBackToDashboard}
             currentUserId={currentUserId}
+            // Props de Socket.IO
+    isConnected={isConnected}
+    joinChat={joinChat}
+    leaveChat={leaveChat}
+    sendSocketMessage={sendSocketMessage}
+    onMessageReceived={onMessageReceived}
+    offMessageReceived={offMessageReceived}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">

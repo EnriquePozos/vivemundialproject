@@ -60,8 +60,8 @@ io.on('connection', (socket) => {
     
     console.log(`💬 Nuevo mensaje en chat ${chatId} de ${senderName}`);
     
-    // Emitir el mensaje a todos los usuarios en ese chat (excepto el remitente)
-    socket.to(`chat_${chatId}`).emit('message:received', {
+    // Emitir el mensaje a TODOS en el chat (incluyendo al remitente para sincronizar pestañas)
+    io.to(`chat_${chatId}`).emit('message:received', {
       chatId,
       message,
       senderId,
