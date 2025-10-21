@@ -71,23 +71,45 @@ class Chat {
      * @return array
      */
     public function obtenerChatsPorUsuario($id_Usuario) {
-        $query = "SELECT c.*, 
-                  COUNT(DISTINCT pc.id_Usuario) as total_participantes,
-                  (SELECT COUNT(*) FROM " . $this->table_mensajes . " WHERE id_Chat = c.id_Chat) as total_mensajes,
-                  (SELECT mensaje FROM " . $this->table_mensajes . " WHERE id_Chat = c.id_Chat ORDER BY id_Mensaje DESC LIMIT 1) as ultimo_mensaje
-                  FROM " . $this->table_chats . " c
-                  INNER JOIN " . $this->table_participantes . " pc ON c.id_Chat = pc.id_Chat
-                  WHERE pc.id_Usuario = :id_Usuario AND c.activo = 1
-                  GROUP BY c.id_Chat
-                  ORDER BY c.id_Chat DESC";
+    $query = "SELECT c.*, 
+              COUNT(DISTINCT pc.id_Usuario) as total_participantes,
+              (SELECT COUNT(*) FROM " . $this->table_mensajes . " WHERE id_Chat = c.id_Chat) as total_mensajes,
+              (SELECT mensaje FROM " . $this->table_mensajes . " WHERE id_Chat = c.id_Chat ORDER BY id_Mensaje DESC LIMIT 1) as ultimo_mensaje,
+              -- Si es chat privado, obtener el nombre del otro usuario
+              CASE 
+                  WHEN c.tipo_Chat = 'privado' THEN
+                      (SELECT u.nombre_Usuario 
+                       FROM Usuario u
+                       INNER JOIN " . $this->table_participantes . " pc2 ON u.id_Usuario = pc2.id_Usuario
+                       WHERE pc2.id_Chat = c.id_Chat 
+                       AND pc2.id_Usuario != :id_Usuario
+                       LIMIT 1)
+                  ELSE c.nombre_Chat
+              END as nombre_Chat_display,
+              -- Obtener el ID del otro usuario en caso de chat privado
+              CASE 
+                  WHEN c.tipo_Chat = 'privado' THEN
+                      (SELECT pc2.id_Usuario
+                       FROM " . $this->table_participantes . " pc2
+                       WHERE pc2.id_Chat = c.id_Chat 
+                       AND pc2.id_Usuario != :id_Usuario2
+                       LIMIT 1)
+                  ELSE NULL
+              END as id_otro_usuario
+              FROM " . $this->table_chats . " c
+              INNER JOIN " . $this->table_participantes . " pc ON c.id_Chat = pc.id_Chat
+              WHERE pc.id_Usuario = :id_Usuario3 AND c.activo = 1
+              GROUP BY c.id_Chat
+              ORDER BY c.id_Chat DESC";
 
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(":id_Usuario", $id_Usuario);
-        $stmt->execute();
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(":id_Usuario", $id_Usuario);
+    $stmt->bindParam(":id_Usuario2", $id_Usuario);
+    $stmt->bindParam(":id_Usuario3", $id_Usuario);
+    $stmt->execute();
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
     /**
      * Obtener información de un chat específico
      * @return array|null

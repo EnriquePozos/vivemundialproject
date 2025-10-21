@@ -352,7 +352,7 @@ const loadMessages = async () => {
             </div>
             <div>
               <h3 className="font-semibold text-gray-800">
-                {chatData.nombre_Chat || "Chat Privado"}
+                {chatData.nombre_Chat_display||chatData.nombre_Chat || "Chat Privado"}
               </h3>
               <p className="text-xs text-gray-500">
                 {chatData.tipo_Chat === "grupal"
@@ -1276,11 +1276,11 @@ const Dashboard = ({ onLogout }) => {
             ) : (
               chats
                 .filter((chat) =>
-                  (chat.nombre_Chat || "Chat")
+                  (chat.nombre_Chat_display || chat.nombre_Chat || "Chat")
                     .toLowerCase()
                     .includes(searchQuery.toLowerCase())
                 )
-                .map((chat) => (
+                .map((chat) => ( 
                   <button
                     key={chat.id_Chat}
                     onClick={() => handleChatClick(chat)}
@@ -1297,7 +1297,7 @@ const Dashboard = ({ onLogout }) => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
                           <h3 className="font-semibold text-gray-800 truncate">
-                            {chat.nombre_Chat || "Chat Privado"}
+                            {chat.nombre_Chat_display || chat.nombre_Chat || "Chat Privado"}
                           </h3>
                           <span className="text-xs text-gray-500">
                             {chat.tipo_Chat === "grupal" &&
