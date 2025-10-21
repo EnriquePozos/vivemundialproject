@@ -519,7 +519,7 @@ const loadMessages = async () => {
                     ? "Escribe un mensaje cifrado..."
                     : "Escribe un mensaje..."
                 }
-                className="w-full px-4 py-3 bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
               />
             </div>
             <button
@@ -529,6 +529,153 @@ const loadMessages = async () => {
               <Send className="w-5 h-5" />
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const NewChatModal = ({ 
+  show,
+  newChatType, 
+  setNewChatType,
+  groupName,
+  setGroupName,
+  allUsers,
+  selectedUsers,
+  toggleUserSelection,
+  closeModal,
+  handleCreateChat 
+}) => {
+  if (!show) return null;
+  
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 backdrop-blur-md">
+      <div
+        className="absolute inset-0 cursor-pointer"
+        onClick={closeModal}
+        style={{
+          background: "rgba(255,255,255,0.1)",
+          backdropFilter: "blur(8px)",
+        }}
+      ></div>
+
+      <div className="relative bg-white rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-2xl font-bold text-gray-800">Nuevo Chat</h3>
+            <button
+              onClick={closeModal}
+              className="text-gray-400 hover:text-gray-600 text-2xl"
+            >
+              ✕
+            </button>
+          </div>
+
+          {!newChatType ? (
+            <div className="space-y-3">
+              <button
+                onClick={() => setNewChatType("privado")}
+                className="w-full p-4 bg-blue-50 hover:bg-blue-100 rounded-xl text-left transition-colors flex items-center space-x-3"
+              >
+                <MessageCircle className="w-6 h-6 text-blue-600" />
+                <div>
+                  <div className="font-semibold text-blue-900">Chat Privado</div>
+                  <div className="text-sm text-blue-600">Conversa con un usuario</div>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setNewChatType("grupal")}
+                className="w-full p-4 bg-purple-50 hover:bg-purple-100 rounded-xl text-left transition-colors flex items-center space-x-3"
+              >
+                <Users className="w-6 h-6 text-purple-600" />
+                <div>
+                  <div className="font-semibold text-purple-900">Chat Grupal</div>
+                  <div className="text-sm text-purple-600">Crea un grupo con varios usuarios</div>
+                </div>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {newChatType === "grupal" && (
+                <div>
+                  {/* 🔧 FIX: Cambiar text-gray-700 a text-gray-900 */}
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Nombre del grupo
+                  </label>
+                  <input
+                    type="text"
+                    value={groupName}
+                    onChange={(e) => setGroupName(e.target.value)}
+                    placeholder="Ej: Amigos del Mundial"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              <div>
+                {/* 🔧 FIX: Cambiar text-gray-700 a text-gray-900 */}
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Selecciona usuarios
+                </label>
+                <div className="max-h-60 overflow-y-auto space-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  {allUsers.length === 0 ? (
+                    <div className="text-center text-gray-500 py-4">
+                      No hay usuarios disponibles
+                    </div>
+                  ) : (
+                    allUsers.map((user) => (
+                      <button
+                        key={user.id_Usuario}
+                        onClick={() => toggleUserSelection(user.id_Usuario)}
+                        className={`w-full p-3 rounded-lg text-left transition-colors flex items-center justify-between ${
+                          selectedUsers.includes(user.id_Usuario)
+                            ? "bg-blue-50 border-2 border-blue-500"
+                            : "bg-white border-2 border-transparent hover:bg-gray-100"
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="text-white text-sm">
+                              {user.nombre_Usuario?.charAt(0).toUpperCase() || "U"}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {user.nombre_Usuario}
+                            </div>
+                            <div className={`text-xs ${user.Estado == 1 ? "text-green-600" : "text-gray-500"}`}>
+                              {user.Estado == 1 ? "En línea" : "Desconectado"}
+                            </div>
+                          </div>
+                        </div>
+                        {selectedUsers.includes(user.id_Usuario) && (
+                          <CheckCircle className="w-5 h-5 text-blue-600" />
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={closeModal}
+                  className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreateChat}
+                  className="flex-1 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
+                >
+                  Crear Chat
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -943,147 +1090,6 @@ const Dashboard = ({ onLogout }) => {
     </div>
   );
 
-  const NewChatModal = () => (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 backdrop-blur-md">
-      <div
-        className="absolute inset-0 cursor-pointer"
-        onClick={closeModal}
-        style={{
-          background: "rgba(255,255,255,0.1)",
-          backdropFilter: "blur(8px)",
-        }}
-      ></div>
-
-      <div className="relative bg-white rounded-2xl w-full max-w-md shadow-2xl">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-2xl font-bold text-gray-800">Nuevo Chat</h3>
-            <button
-              onClick={closeModal}
-              className="text-gray-400 hover:text-gray-600 text-2xl"
-            >
-              ✕
-            </button>
-          </div>
-
-          {!newChatType ? (
-            <div className="space-y-3">
-              <button
-                onClick={() => setNewChatType("privado")}
-                className="w-full p-4 bg-blue-50 hover:bg-blue-100 rounded-xl text-left transition-colors flex items-center space-x-3"
-              >
-                <MessageCircle className="w-6 h-6 text-blue-600" />
-                <div>
-                  <div className="font-semibold text-blue-900">
-                    Chat Privado
-                  </div>
-                  <div className="text-sm text-blue-600">
-                    Conversa con un usuario
-                  </div>
-                </div>
-              </button>
-              <button
-                onClick={() => setNewChatType("grupal")}
-                className="w-full p-4 bg-purple-50 hover:bg-purple-100 rounded-xl text-left transition-colors flex items-center space-x-3"
-              >
-                <Users className="w-6 h-6 text-purple-600" />
-                <div>
-                  <div className="font-semibold text-purple-900">
-                    Chat Grupal
-                  </div>
-                  <div className="text-sm text-purple-600">
-                    Crea un grupo con varios usuarios
-                  </div>
-                </div>
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {newChatType === "grupal" && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nombre del grupo
-                  </label>
-                  <input
-                    type="text"
-                    value={groupName}
-                    onChange={(e) => setGroupName(e.target.value)}
-                    placeholder="Ej: Amigos del Mundial"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Selecciona usuarios
-                </label>
-                <div className="max-h-60 overflow-y-auto space-y-2 border border-gray-200 rounded-lg p-3">
-                  {/* REEMPLAZO DEL MOCK: Usar `allUsers` de la API */}
-                  {allUsers.length === 0 ? (
-                    <p className="text-center text-gray-500 py-4">
-                      Cargando usuarios o no hay más usuarios disponibles...
-                    </p>
-                  ) : (
-                    allUsers.map((user) => (
-                      <button
-                        key={user.id_Usuario} // Usar id_Usuario de la API
-                        onClick={() => toggleUserSelection(user.id_Usuario)}
-                        className={`w-full p-3 rounded-lg text-left transition-colors flex items-center justify-between ${
-                          selectedUsers.includes(user.id_Usuario)
-                            ? "bg-blue-100 border-2 border-blue-500"
-                            : "bg-gray-50 border-2 border-transparent hover:bg-gray-100"
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                            <span className="text-white text-lg">👤</span>
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-800">
-                              {user.nombre_Usuario}
-                            </div>{" "}
-                            {/* Usar nombre_Usuario */}
-                            <div
-                              className={`text-xs ${
-                                user.Estado ? "text-green-600" : "text-gray-500"
-                              }`}
-                            >
-                              {user.Estado == 1 ? "En línea" : "Desconectado"}{" "}
-                              {/* Usar Estado de la API */}
-                            </div>
-                          </div>
-                        </div>
-                        {selectedUsers.includes(user.id_Usuario) && (
-                          <CheckCircle className="w-5 h-5 text-blue-600" />
-                        )}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="flex space-x-3">
-                <button
-                  onClick={closeModal}
-                  className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleCreateChat}
-                  className="flex-1 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                  Crear Chat
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
   const NewQuinielaModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
@@ -1249,7 +1255,7 @@ const Dashboard = ({ onLogout }) => {
                 placeholder="Buscar chats..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
               />
             </div>
           </div>
@@ -1492,7 +1498,17 @@ const Dashboard = ({ onLogout }) => {
         </div>
       </div>
 
-      {showNewChatModal && <NewChatModal />}
+      {showNewChatModal && <NewChatModal 
+  show={showNewChatModal}
+  newChatType={newChatType}
+  setNewChatType={setNewChatType}
+  groupName={groupName}
+  setGroupName={setGroupName}
+  allUsers={allUsers}
+  selectedUsers={selectedUsers}
+  toggleUserSelection={toggleUserSelection}
+  closeModal={closeModal}
+  handleCreateChat={handleCreateChat}/>}
     </div>
   );
 };
