@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { API_ENDPOINTS, chatService, userService } from "../config/api"; // <--- MODIFICACIÓN: Importamos userService
 import { useSocket } from "../hooks/useSocket";
+import VideoCall from "./VideoCall"; // Componente de videollamadas
 
 // Componente de Chat Privado integrado
 const PrivateChat = ({
@@ -50,6 +51,8 @@ const PrivateChat = ({
   const [encryptionEnabled, setEncryptionEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef(null);
+  const [showVideoCall, setShowVideoCall] = useState(false);
+  const [videoCallType, setVideoCallType] = useState('privada');
 
   // Cargar mensajes del chat
   useEffect(() => {
@@ -325,15 +328,22 @@ const loadMessages = async () => {
 
   const startVideoCall = () => {
     console.log("Iniciando videollamada");
-    alert("Iniciando videollamada con " + chatData.nombre_Chat + "...");
+    
+    // Determinar si es grupal o privada
+    const isGroup = chatData.tipo_Chat === 'grupal';
+    
+    setVideoCallType(isGroup ? 'grupal' : 'privada');
+    setShowVideoCall(true);
   };
 
   const startVoiceCall = () => {
     console.log("Iniciando llamada de voz");
-    alert("Iniciando llamada de voz con " + chatData.nombre_Chat + "...");
+    // Por ahora usar videollamada con solo audio
+    setVideoCallType('privada');
+    setShowVideoCall(true);
   };
 
-  return (
+    return (
     <div className="flex-1 flex flex-col bg-gray-50">
       {/* Header del chat */}
       <div className="bg-white border-b border-gray-200 p-4">
@@ -341,7 +351,12 @@ const loadMessages = async () => {
           <div className="flex items-center space-x-4">
             <button
               onClick={onBack}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              disabled={showVideoCall} // ← BLOQUEAR durante videollamada
+              className={`p-2 rounded-lg transition-colors ${
+                showVideoCall 
+                  ? 'opacity-50 cursor-not-allowed' 
+                  : 'hover:bg-gray-100'
+              }`}
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </button>
@@ -364,20 +379,33 @@ const loadMessages = async () => {
           <div className="flex items-center space-x-2">
             <button
               onClick={startVoiceCall}
-              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              disabled={showVideoCall} // ← BLOQUEAR durante videollamada
+              className={`p-2 rounded-lg transition-colors ${
+                showVideoCall
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
             >
               <Phone className="w-5 h-5" />
             </button>
             <button
               onClick={startVideoCall}
-              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              disabled={showVideoCall} // ← BLOQUEAR durante videollamada
+              className={`p-2 rounded-lg transition-colors ${
+                showVideoCall
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
             >
               <Video className="w-5 h-5" />
             </button>
             <button
               onClick={() => setEncryptionEnabled(!encryptionEnabled)}
+              disabled={showVideoCall} // ← BLOQUEAR durante videollamada
               className={`p-2 rounded-lg transition-colors ${
-                encryptionEnabled
+                showVideoCall
+                  ? 'opacity-50 cursor-not-allowed'
+                  : encryptionEnabled
                   ? "bg-green-100 text-green-600"
                   : "text-gray-600 hover:bg-gray-100"
               }`}
@@ -388,149 +416,126 @@ const loadMessages = async () => {
                 <ShieldOff className="w-5 h-5" />
               )}
             </button>
-            <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+            <button 
+              disabled={showVideoCall} // ← BLOQUEAR durante videollamada
+              className={`p-2 rounded-lg transition-colors ${
+                showVideoCall
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
               <MoreVertical className="w-5 h-5" />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Contenido - Mensajes */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-y-auto p-6">
-         {loading ? (
-  <div className="flex items-center justify-center h-full">
-    <div className="text-gray-500">Cargando mensajes...</div>
-  </div>
-) : messages.length === 0 ? (
-  <div className="flex items-center justify-center h-full">
-    <div className="text-center text-gray-500">
-      <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-      <p>No hay mensajes aún</p>
-      <p className="text-sm">Envía el primer mensaje</p>
-    </div>
-  </div>
-) : (
-  <div className="space-y-4">
-    {messages.map((msg, index) => {
-      // Usar "message" porque ahora todos los mensajes tienen esa propiedad
-      const messageContent = msg.message || msg.contenido || '';
-      const messageSender = msg.sender || msg.nombre_Usuario || 'Usuario';
-      const messageTime = msg.time || msg.timeString || 'Ahora';
-      const messageId = msg.id || msg.id_Mensaje || index;
+      {/* ========================================== */}
+      {/* CAMBIO PRINCIPAL: RENDERIZADO CONDICIONAL */}
+      {/* ========================================== */}
+      {showVideoCall ? (
+        // ✅ SI HAY VIDEOLLAMADA: Mostrar VideoCall (REEMPLAZA el área de mensajes)
+        <VideoCall
+          chatData={chatData}
+          currentUser={{
+            id_Usuario: currentUserId,
+            nombre_Usuario: userName,
+          }}
+          onClose={() => setShowVideoCall(false)}
+          isGroupCall={videoCallType === 'grupal'}
+        />
+      ) : (
+        // ✅ SI NO HAY VIDEOLLAMADA: Mostrar mensajes normales
+        <>
+          {/* Contenido - Mensajes */}
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-1 overflow-y-auto p-6">
+              {loading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-gray-500">Cargando mensajes...</div>
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center text-gray-500">
+                    <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No hay mensajes aún</p>
+                    <p className="text-sm">Envía el primer mensaje</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {messages.map((msg, index) => {
+                    const messageContent = msg.message || msg.contenido || '';
+                    const messageSender = msg.sender || msg.nombre_Usuario || 'Usuario';
+                    const messageTime = msg.time || msg.timeString || 'Ahora';
+                    const messageId = msg.id || msg.id_Mensaje || index;
 
-      return (
-        <div
-          key={messageId}
-          className={`flex ${msg.isOwn ? "justify-end" : "justify-start"}`}
-        >
-          <div
-            className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl ${
-              msg.isOwn
-                ? "bg-blue-500 text-white"
-                : "bg-gray-200 text-gray-800"
-            }`}
-          >
-            {/* Nombre del remitente */}
-            {!msg.isOwn && (
-              <div className="text-xs font-semibold mb-1 opacity-75">
-                {messageSender}
-              </div>
-            )}
-            
-            {/* Indicador de cifrado */}
-            {(msg.encrypted || msg.cifrado) && (
-              <div className="flex items-center space-x-1 mb-1">
-                <Shield className="w-3 h-3" />
-                <span className="text-xs opacity-75">Cifrado</span>
-              </div>
-            )}
-            
-            {/* CONTENIDO DEL MENSAJE */}
-            <div className="text-sm break-words whitespace-pre-wrap">
-              {messageContent}
+                    return (
+                      <div
+                        key={messageId}
+                        className={`flex ${msg.isOwn ? "justify-end" : "justify-start"}`}
+                      >
+                        <div
+                          className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl ${
+                            msg.isOwn
+                              ? "bg-blue-500 text-white rounded-br-none"
+                              : "bg-white text-gray-800 rounded-bl-none shadow-sm"
+                          }`}
+                        >
+                          {!msg.isOwn && (
+                            <p className="text-xs font-semibold mb-1 opacity-75">
+                              {messageSender}
+                            </p>
+                          )}
+                          <p className="break-words">
+                            {msg.encrypted && "🔒 "}
+                            {messageContent}
+                          </p>
+                          <p
+                            className={`text-xs mt-1 ${
+                              msg.isOwn ? "text-blue-100" : "text-gray-500"
+                            }`}
+                          >
+                            {messageTime}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
             </div>
-            
-            {/* Hora */}
-            <div
-              className={`text-xs mt-1 ${
-                msg.isOwn ? "text-blue-100" : "text-gray-600"
-              }`}
-            >
-              {messageTime}
+
+            {/* Input de mensajes */}
+            <div className="bg-white border-t border-gray-200 p-4">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => sendFile("image")}
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <Paperclip className="w-5 h-5" />
+                </button>
+                <input
+                  type="text"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyPress={(e) => e.key === "Enter" && sendMessage()}
+                  placeholder="Escribe un mensaje..."
+                  className="flex-1 px-4 py-2 bg-gray-100 text-black rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={sendMessage}
+                  disabled={!message.trim()}
+                  className="p-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      );
-    })}
-    <div ref={messagesEndRef} />
-  </div>
-)}
-          
-        </div>
-
-        {/* Barra de texto */}
-        <div className="p-6 bg-white border-t border-gray-200">
-          {encryptionEnabled && (
-            <div className="mb-3 flex items-center space-x-2 text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg">
-              <Shield className="w-4 h-4" />
-              <span>Los mensajes están cifrados de extremo a extremo</span>
-            </div>
-          )}
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => sendFile("imagen")}
-                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
-                title="Enviar imagen"
-              >
-                <Image className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => sendFile("archivo")}
-                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
-                title="Enviar archivo"
-              >
-                <FileText className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => sendFile("audio")}
-                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
-                title="Enviar audio"
-              >
-                <Mic className="w-5 h-5" />
-              </button>
-              <button
-                onClick={shareLocation}
-                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
-                title="Compartir ubicación"
-              >
-                <MapPin className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 relative">
-              <input
-                type="text"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && sendMessage()}
-                placeholder={
-                  encryptionEnabled
-                    ? "Escribe un mensaje cifrado..."
-                    : "Escribe un mensaje..."
-                }
-                className="w-full px-4 py-3 bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
-              />
-            </div>
-            <button
-              onClick={sendMessage}
-              className="p-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors"
-            >
-              <Send className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 };

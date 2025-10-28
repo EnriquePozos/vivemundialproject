@@ -27,3 +27,8 @@ RewriteRule ^chats/mis-chats$ chats.php [L,QSA]
 RewriteRule ^chats/info$ chats.php [L,QSA]
 RewriteRule ^chats/mensajes$ chats.php [L,QSA]
 RewriteRule ^chats/enviar$ chats.php [L,QSA]
+
+# Redirigir endpoints de videollamadas
+RewriteRule ^videocall/token$ videocall.php [L,QSA]
+RewriteRule ^videocall/iniciar$ videocall.php [L,QSA]
+RewriteRule ^videocall/finalizar$ videocall.php [L,QSA]
