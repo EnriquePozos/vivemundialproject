@@ -30,6 +30,7 @@ import {
   Mic,
 } from "lucide-react";
 import { API_ENDPOINTS, chatService, userService } from "../config/api"; // <--- MODIFICACIÓN: Importamos userService
+import videoCallService from "../services/videoCallService";
 import { useSocket } from "../hooks/useSocket";
 import VideoCall from "./VideoCall"; // Componente de videollamadas
 
@@ -53,6 +54,8 @@ const PrivateChat = ({
   const messagesEndRef = useRef(null);
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [videoCallType, setVideoCallType] = useState('privada');
+  const [incomingCall, setIncomingCall] = useState(null); // { roomName, callerName, callerId }
+  const [joinRoomName, setJoinRoomName] = useState(null); // Para unirse a sala existente
 
   // Cargar mensajes del chat
   useEffect(() => {
@@ -80,77 +83,66 @@ useEffect(() => {
 
   console.log('👂 Escuchando mensajes en tiempo real para chat:', chatData.id_Chat);
 
-  const handleNewMessage = (messageData) => {
-    console.log('📨 Mensaje recibido por WebSocket:', messageData);
-
-    // Solo agregar si es del chat actual
-    if (messageData.chatId === chatData.id_Chat) {
-      
-      // Formatear hora
-      let timeString = "";
-      try {
-        const date = new Date(messageData.timestamp);
-        timeString = date.toLocaleTimeString("es-ES", {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-      } catch (e) {
-        timeString = "Ahora";
-      }
-
-      // =========================================
-      // FORMATO UNIFICADO - IMPORTANTE
-      // =========================================
-      const formattedMessage = {
-        // IDs
-        id: messageData.messageId || Date.now(),
-        id_Mensaje: messageData.messageId || Date.now(),
-        
-        // Contenido del mensaje
-        message: messageData.message,        // ← Para renderizado
-        contenido: messageData.message,      // ← Para compatibilidad
-        
-        // Usuario
-        sender: messageData.senderName,
-        nombre_Usuario: messageData.senderName,
-        
-        // Metadata
-        time: timeString,
-        timeString: timeString,
-        fecha_Hora: messageData.timestamp,
-        
-        // Tipo y estado
-        tipo: messageData.type || 'texto',
-        tipo_Mensaje: messageData.type || 'texto',
-        encrypted: messageData.encrypted || false,
-        cifrado: messageData.encrypted || false,
-        
-        // Identificar si es mensaje propio
-        isOwn: messageData.senderId === currentUserId,
-        id_Usuario: messageData.senderId
-      };
-
-      console.log('📝 Mensaje formateado:', formattedMessage);
-
-      // Agregar el mensaje al estado (evitar duplicados por ID)
-      setMessages(prevMessages => {
-        // Verificar si el mensaje ya existe por ID
-        const exists = prevMessages.some(msg => 
-          msg.id === formattedMessage.id || 
-          msg.id_Mensaje === formattedMessage.id_Mensaje
-        );
-        
-        if (exists) {
-          console.log('⚠️ Mensaje duplicado detectado, no se agrega');
-          return prevMessages;
-        }
-
-        console.log('✅ Agregando mensaje nuevo al estado');
-        return [...prevMessages, formattedMessage];
+const handleNewMessage = (messageData) => {
+  console.log('📨 Mensaje/Evento recibido por WebSocket:', messageData);
+  console.log('🔍 Tipo de mensaje:', messageData.type);
+  console.log('🔍 Todos los campos:', Object.keys(messageData));
+  // ✨ NUEVO: Detectar notificación de videollamada
+  if (messageData.type === 'video_call_start' && messageData.chatId === chatData.id_Chat) {
+    console.log('🔔 Notificación de videollamada recibida');
+    
+    // Solo mostrar notificación si NO soy el que inició la llamada
+    if (messageData.callerId !== currentUserId) {
+      setIncomingCall({
+        roomName: messageData.roomName,
+        callerName: messageData.callerName,
+        callerId: messageData.callerId,
       });
     }
-  };
+    return; // No procesar como mensaje normal
+  }
 
+  // Solo agregar si es del chat actual y es mensaje normal
+  if (messageData.chatId === chatData.id_Chat && messageData.type !== 'video_call_start') {
+    // ... resto del código de formateo de mensajes (NO TOCAR el resto)
+    const formattedMessage = {
+      id: messageData.messageId,
+      id_Mensaje: messageData.messageId,
+      message: messageData.message,
+      contenido: messageData.message,
+      sender: messageData.senderName,
+      nombre_Usuario: messageData.senderName,
+      time: new Date(messageData.timestamp).toLocaleTimeString('es-MX', {
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      timeString: new Date(messageData.timestamp).toLocaleTimeString('es-MX', {
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      isOwn: messageData.senderId === currentUserId,
+      tipo_Mensaje: messageData.type || 'texto',
+      cifrado: messageData.encrypted || false,
+    };
+
+    console.log('📝 Mensaje formateado:', formattedMessage);
+
+    setMessages(prevMessages => {
+      const exists = prevMessages.some(msg => 
+        (msg.id === formattedMessage.id) || 
+        (msg.id_Mensaje === formattedMessage.id_Mensaje)
+      );
+
+      if (exists) {
+        console.log('⚠️ Mensaje duplicado ignorado:', formattedMessage.id);
+        return prevMessages;
+      }
+
+      console.log('✅ Agregando mensaje nuevo al estado');
+      return [...prevMessages, formattedMessage];
+    });
+  }
+};
   // Registrar el listener
   onMessageReceived(handleNewMessage);
 
@@ -326,15 +318,73 @@ const loadMessages = async () => {
     alert("Compartiendo ubicación actual...");
   };
 
-  const startVideoCall = () => {
-    console.log("Iniciando videollamada");
+const startVideoCall = async () => {
+  console.log("📞 Iniciando videollamada y notificando...");
+  
+  const isGroup = chatData.tipo_Chat === 'grupal';
+  setVideoCallType(isGroup ? 'grupal' : 'privada');
+  
+  try {
+    // 1. Crear la llamada en el backend PRIMERO para obtener el roomName real
+    const callResponse = await videoCallService.iniciarLlamada(
+      chatData.id_Chat,
+      isGroup ? 'grupal' : 'privada'
+    );
     
-    // Determinar si es grupal o privada
-    const isGroup = chatData.tipo_Chat === 'grupal';
+    const realRoomName = callResponse.data.roomName;
+    console.log('🎯 RoomName real generado:', realRoomName);
     
-    setVideoCallType(isGroup ? 'grupal' : 'privada');
+    // 2. Guardar el roomName para que VideoCall lo use
+    setJoinRoomName(realRoomName);
+    
+    // 3. Emitir notificación WebSocket con el roomName REAL
+    if (isConnected) {
+      sendSocketMessage({
+        type: 'video_call_start',
+        chatId: chatData.id_Chat,
+        roomName: realRoomName, // ← roomName REAL del backend
+        callerId: currentUserId,
+        callerName: userName,
+        timestamp: new Date().toISOString(),
+      });
+      
+      console.log('📡 Notificación enviada con roomName:', realRoomName);
+    }
+    
+    // 4. Mostrar la videollamada
     setShowVideoCall(true);
-  };
+    
+  } catch (error) {
+    console.error('❌ Error al iniciar videollamada:', error);
+    alert('Error al iniciar la videollamada: ' + error.message);
+  }
+};
+
+// Aceptar llamada entrante
+const acceptIncomingCall = () => {
+  console.log('✅ Aceptando llamada de:', incomingCall.callerName);
+  
+  setJoinRoomName(incomingCall.roomName); // Guardar roomName para pasarlo a VideoCall
+  setVideoCallType('privada');
+  setShowVideoCall(true);
+  setIncomingCall(null); // Cerrar modal de notificación
+};
+
+// Rechazar llamada entrante
+const declineIncomingCall = () => {
+  console.log('❌ Rechazando llamada de:', incomingCall.callerName);
+  setIncomingCall(null);
+  
+  // Opcional: Notificar al otro usuario que rechazaste
+  if (isConnected) {
+    sendSocketMessage({
+      type: 'video_call_declined',
+      chatId: chatData.id_Chat,
+      userId: currentUserId,
+      timestamp: new Date().toISOString(),
+    });
+  }
+};
 
   const startVoiceCall = () => {
     console.log("Iniciando llamada de voz");
@@ -343,128 +393,179 @@ const loadMessages = async () => {
     setShowVideoCall(true);
   };
 
-    return (
-    <div className="flex-1 flex flex-col bg-gray-50">
-      {/* Header del chat */}
-      <div className="bg-white border-b border-gray-200 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={onBack}
-              disabled={showVideoCall} // ← BLOQUEAR durante videollamada
-              className={`p-2 rounded-lg transition-colors ${
-                showVideoCall 
-                  ? 'opacity-50 cursor-not-allowed' 
-                  : 'hover:bg-gray-100'
-              }`}
-            >
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
-            </button>
-            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-              <span className="text-white text-lg">
-                {chatData.tipo_Chat === "grupal" ? "👥" : "👤"}
-              </span>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-800">
-                {chatData.nombre_Chat_display||chatData.nombre_Chat || "Chat Privado"}
-              </h3>
-              <p className="text-xs text-gray-500">
-                {chatData.tipo_Chat === "grupal"
-                  ? `${chatData.total_participantes || 0} participantes`
-                  : "En línea"}
-              </p>
-            </div>
+return (
+  <div className="flex-1 flex flex-col bg-gray-50">
+    
+    {/* Header del chat */}
+    <div className="bg-white border-b border-gray-200 p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={onBack}
+            disabled={showVideoCall} // ← BLOQUEAR durante videollamada
+            className={`p-2 rounded-lg transition-colors ${
+              showVideoCall 
+                ? 'opacity-50 cursor-not-allowed' 
+                : 'hover:bg-gray-100'
+            }`}
+          >
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          </button>
+          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+            <span className="text-white text-lg">
+              {chatData.tipo_Chat === "grupal" ? "👥" : "👤"}
+            </span>
           </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={startVoiceCall}
-              disabled={showVideoCall} // ← BLOQUEAR durante videollamada
-              className={`p-2 rounded-lg transition-colors ${
-                showVideoCall
-                  ? 'opacity-50 cursor-not-allowed'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Phone className="w-5 h-5" />
-            </button>
-            <button
-              onClick={startVideoCall}
-              disabled={showVideoCall} // ← BLOQUEAR durante videollamada
-              className={`p-2 rounded-lg transition-colors ${
-                showVideoCall
-                  ? 'opacity-50 cursor-not-allowed'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Video className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setEncryptionEnabled(!encryptionEnabled)}
-              disabled={showVideoCall} // ← BLOQUEAR durante videollamada
-              className={`p-2 rounded-lg transition-colors ${
-                showVideoCall
-                  ? 'opacity-50 cursor-not-allowed'
-                  : encryptionEnabled
-                  ? "bg-green-100 text-green-600"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              {encryptionEnabled ? (
-                <Shield className="w-5 h-5" />
-              ) : (
-                <ShieldOff className="w-5 h-5" />
-              )}
-            </button>
-            <button 
-              disabled={showVideoCall} // ← BLOQUEAR durante videollamada
-              className={`p-2 rounded-lg transition-colors ${
-                showVideoCall
-                  ? 'opacity-50 cursor-not-allowed'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <MoreVertical className="w-5 h-5" />
-            </button>
+          <div>
+            <h3 className="font-semibold text-gray-800">
+              {chatData.nombre_Chat_display||chatData.nombre_Chat || "Chat Privado"}
+            </h3>
+            <p className="text-xs text-gray-500">
+              {chatData.tipo_Chat === "grupal"
+                ? `${chatData.total_participantes || 0} participantes`
+                : "En línea"}
+            </p>
           </div>
         </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={startVoiceCall}
+            disabled={showVideoCall} // ← BLOQUEAR durante videollamada
+            className={`p-2 rounded-lg transition-colors ${
+              showVideoCall
+                ? 'opacity-50 cursor-not-allowed'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Phone className="w-5 h-5" />
+          </button>
+          <button
+            onClick={startVideoCall}
+            disabled={showVideoCall} // ← BLOQUEAR durante videollamada
+            className={`p-2 rounded-lg transition-colors ${
+              showVideoCall
+                ? 'opacity-50 cursor-not-allowed'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Video className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setEncryptionEnabled(!encryptionEnabled)}
+            disabled={showVideoCall} // ← BLOQUEAR durante videollamada
+            className={`p-2 rounded-lg transition-colors ${
+              showVideoCall
+                ? 'opacity-50 cursor-not-allowed'
+                : encryptionEnabled
+                ? "bg-green-100 text-green-600"
+                : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            {encryptionEnabled ? (
+              <Shield className="w-5 h-5" />
+            ) : (
+              <ShieldOff className="w-5 h-5" />
+            )}
+          </button>
+          <button 
+            disabled={showVideoCall} // ← BLOQUEAR durante videollamada
+            className={`p-2 rounded-lg transition-colors ${
+              showVideoCall
+                ? 'opacity-50 cursor-not-allowed'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <MoreVertical className="w-5 h-5" />
+          </button>
+        </div>
       </div>
+    </div>
 
-      {/* ========================================== */}
-      {/* CAMBIO PRINCIPAL: RENDERIZADO CONDICIONAL */}
-      {/* ========================================== */}
-      {showVideoCall ? (
-        // ✅ SI HAY VIDEOLLAMADA: Mostrar VideoCall (REEMPLAZA el área de mensajes)
-        <VideoCall
-          chatData={chatData}
-          currentUser={{
-            id_Usuario: currentUserId,
-            nombre_Usuario: userName,
-          }}
-          onClose={() => setShowVideoCall(false)}
-          isGroupCall={videoCallType === 'grupal'}
-        />
-      ) : (
-        // ✅ SI NO HAY VIDEOLLAMADA: Mostrar mensajes normales
-        <>
-          {/* Contenido - Mensajes */}
-          <div className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-y-auto p-6">
-              {loading ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-gray-500">Cargando mensajes...</div>
-                </div>
-              ) : messages.length === 0 ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-center text-gray-500">
-                    <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>No hay mensajes aún</p>
-                    <p className="text-sm">Envía el primer mensaje</p>
+    {/* ========================================== */}
+    {/* CAMBIO PRINCIPAL: RENDERIZADO CONDICIONAL */}
+    {/* ========================================== */}
+    {showVideoCall ? (
+      // ✅ SI HAY VIDEOLLAMADA: Mostrar VideoCall (REEMPLAZA el área de mensajes)
+      <VideoCall
+        chatData={chatData}
+        currentUser={{
+          id_Usuario: currentUserId,
+          nombre_Usuario: userName,
+        }}
+        onClose={() => {
+      setShowVideoCall(false);
+      setJoinRoomName(null); // Limpiar roomName al cerrar
+    }}
+    isGroupCall={videoCallType === 'grupal'}
+    roomName={joinRoomName} //Pasar roomName si se está uniendo
+      />
+    ) : (
+      // ✅ SI NO HAY VIDEOLLAMADA: Mostrar mensajes normales
+      <>
+        {/* Contenido - Mensajes */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-y-auto p-6">
+            {loading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-gray-500">Cargando mensajes...</div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* ========================================== */}
+                {/* NOTIFICACIÓN DE LLAMADA ENTRANTE */}
+                {/* ========================================== */}
+                {incomingCall && (
+                  <div className="flex justify-center mb-4">
+                    <div className="bg-white rounded-2xl shadow-lg border-2 border-blue-500 p-6 max-w-sm w-full animate-pulse">
+                      <div className="flex flex-col items-center text-center">
+                        {/* Icono de teléfono */}
+                        <div className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center mb-4">
+                          <Phone className="w-8 h-8 text-white animate-bounce" />
+                        </div>
+                        
+                        {/* Título */}
+                        <h3 className="text-xl font-bold text-gray-800 mb-2">
+                          📞 Llamada Entrante
+                        </h3>
+                        
+                        {/* Nombre del llamador */}
+                        <p className="text-gray-600 mb-4">
+                          <span className="font-semibold text-blue-600">{incomingCall.callerName}</span> te está llamando
+                        </p>
+                        
+                        {/* Botones */}
+                        <div className="flex gap-3 w-full">
+                          <button
+                            onClick={declineIncomingCall}
+                            className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-all transform hover:scale-105 flex items-center justify-center gap-2"
+                          >
+                            ❌ Rechazar
+                          </button>
+                          <button
+                            onClick={acceptIncomingCall}
+                            className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-all transform hover:scale-105 flex items-center justify-center gap-2"
+                          >
+                            ✅ Aceptar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {messages.map((msg, index) => {
+                )}
+
+                {/* ========================================== */}
+                {/* MENSAJES NORMALES */}
+                {/* ========================================== */}
+                {messages.length === 0 && !incomingCall ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center text-gray-500">
+                      <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p>No hay mensajes aún</p>
+                      <p className="text-sm">Envía el primer mensaje</p>
+                    </div>
+                  </div>
+                ) : (
+                  messages.map((msg, index) => {
                     const messageContent = msg.message || msg.contenido || '';
                     const messageSender = msg.sender || msg.nombre_Usuario || 'Usuario';
                     const messageTime = msg.time || msg.timeString || 'Ahora';
@@ -501,43 +602,44 @@ const loadMessages = async () => {
                         </div>
                       </div>
                     );
-                  })}
-                  <div ref={messagesEndRef} />
-                </div>
-              )}
-            </div>
-
-            {/* Input de mensajes */}
-            <div className="bg-white border-t border-gray-200 p-4">
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => sendFile("image")}
-                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <Paperclip className="w-5 h-5" />
-                </button>
-                <input
-                  type="text"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && sendMessage()}
-                  placeholder="Escribe un mensaje..."
-                  className="flex-1 px-4 py-2 bg-gray-100 text-black rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <button
-                  onClick={sendMessage}
-                  disabled={!message.trim()}
-                  className="p-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Send className="w-5 h-5" />
-                </button>
+                  })
+                )}
+                <div ref={messagesEndRef} />
               </div>
+            )}
+          </div>
+
+          {/* Input de mensajes */}
+          <div className="bg-white border-t border-gray-200 p-4">
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => sendFile("image")}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
+              <input
+                type="text"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && sendMessage()}
+                placeholder="Escribe un mensaje..."
+                className="flex-1 px-4 py-2 bg-gray-100 text-black rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                onClick={sendMessage}
+                disabled={!message.trim()}
+                className="p-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send className="w-5 h-5" />
+              </button>
             </div>
           </div>
-        </>
-      )}
-    </div>
-  );
+        </div>
+      </>
+    )}
+  </div>
+);
 };
 
 const NewChatModal = ({ 

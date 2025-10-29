@@ -98,11 +98,14 @@ const VideoCall = ({
       // 4. Conectar a la sala
       await newRoom.connect(url, token);
       console.log('✅ Conectado a la sala de LiveKit');
+      setTimeout(() => {
+      attachExistingTracks(newRoom);
+      }, 500);
 
       // 5. Habilitar cámara y micrófono
       console.log('📹 Solicitando cámara y micrófono...');
-      await newRoom.localParticipant.enableCameraAndMicrophone();
-      console.log('📹 Cámara y micrófono habilitados');
+await newRoom.localParticipant.enableCameraAndMicrophone();
+console.log('📹 Cámara y micrófono habilitados');
 
       // 6. CAMBIAR ESTADO PARA QUE SE RENDERICE LA INTERFAZ
       setIsConnecting(false);
@@ -144,48 +147,129 @@ const VideoCall = ({
     }
   };
 
+/**
+ * Adjuntar tracks de participantes que ya están en la sala
+ */
+/**
+ * Adjuntar tracks de participantes que ya están en la sala
+ */
+const attachExistingTracks = (room) => {
+  console.log('🔗 Adjuntando tracks existentes...');
+  
+  if (!room) {
+    console.warn('⚠️ Room no disponible');
+    return;
+  }
+  
+  try {
+    // ✨ CORRECCIÓN: Usar remoteParticipants
+    const participantsArray = Array.from(room.remoteParticipants.values());
+    console.log('👥 Participantes en la sala:', participantsArray.length);
+    
+    participantsArray.forEach((participant) => {
+      console.log('🔍 Procesando participante:', participant.identity);
+      
+      // Verificar que el participante tenga tracks
+      if (!participant.trackPublications) {
+        console.warn('⚠️ Participante sin tracks:', participant.identity);
+        return;
+      }
+      
+      // Convertir tracks a array y procesar
+      const tracksArray = Array.from(participant.trackPublications.values());
+      
+      tracksArray.forEach((publication) => {
+        if (publication.track && publication.isSubscribed) {
+          const track = publication.track;
+          
+          if (track.kind === Track.Kind.Video) {
+            setTimeout(() => {
+              const videoElement = remoteVideosRef.current[participant.identity];
+              if (videoElement) {
+                track.attach(videoElement);
+                console.log('✅ Video existente adjuntado:', participant.identity);
+              } else {
+                console.warn('⚠️ Elemento de video no encontrado para:', participant.identity);
+              }
+            }, 200);
+          }
+          
+          if (track.kind === Track.Kind.Audio) {
+            track.attach();
+            console.log('🔊 Audio existente adjuntado:', participant.identity);
+          }
+        }
+      });
+    });
+  } catch (error) {
+    console.error('❌ Error en attachExistingTracks:', error);
+  }
+};
+
   /**
    * Configurar listeners de eventos de la sala
    */
-  const setupRoomListeners = (room) => {
-    room.on(RoomEvent.ParticipantConnected, (participant) => {
-      console.log('👤 Participante conectado:', participant.identity);
+
+const setupRoomListeners = (room) => {
+  room.on(RoomEvent.ParticipantConnected, (participant) => {
+    console.log('👤 Participante conectado:', participant.identity);
+    actualizarListaParticipantes(room);
+    console.log('ℹ️ Esperando que useEffect adjunte los tracks...');
+  });
+
+  room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+    console.log('👋 Participante desconectado:', participant.identity);
+    actualizarListaParticipantes(room);
+    
+    if (remoteVideosRef.current[participant.identity]) {
+      delete remoteVideosRef.current[participant.identity];
+    }
+  });
+
+  room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+    console.log('🎬 Track recibido:', track.kind, 'de', participant.identity);
+
+    // Audio se adjunta automáticamente
+    if (track.kind === Track.Kind.Audio) {
+      track.attach();
+      console.log('🔊 Audio remoto adjuntado:', participant.identity);
+    }
+    
+    // Video lo manejará el useEffect cuando participants se actualice
+    if (track.kind === Track.Kind.Video) {
+      console.log('ℹ️ Track de video recibido, forzando actualización...');
       actualizarListaParticipantes(room);
-    });
+    }
+  });
 
-    room.on(RoomEvent.ParticipantDisconnected, (participant) => {
-      console.log('👋 Participante desconectado:', participant.identity);
-      actualizarListaParticipantes(room);
-      
-      if (remoteVideosRef.current[participant.identity]) {
-        delete remoteVideosRef.current[participant.identity];
-      }
-    });
+  room.on(RoomEvent.TrackUnsubscribed, (track) => {
+    console.log('🔇 Track removido');
+    track.detach();
+  });
+};
 
-    room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-      console.log('🎬 Track recibido:', track.kind, 'de', participant.identity);
 
-      if (track.kind === Track.Kind.Video) {
-        const videoElement = remoteVideosRef.current[participant.identity];
-        if (videoElement) {
-          track.attach(videoElement);
-        }
-      }
-    });
-
-    room.on(RoomEvent.TrackUnsubscribed, (track) => {
-      console.log('🔇 Track removido');
-      track.detach();
-    });
-  };
-
-  /**
-   * Actualizar lista de participantes
-   */
-  const actualizarListaParticipantes = (room) => {
-    const participantsList = Array.from(room.participants.values());
-    setParticipants(participantsList);
-  };
+/**
+ * Actualizar lista de participantes
+ */
+const actualizarListaParticipantes = (room) => {
+  if (!room) {
+    console.warn('⚠️ Room no disponible');
+    setParticipants([]);
+    return;
+  }
+  
+  try {
+    // ✨ CORRECCIÓN: Usar el getter correcto de LiveKit
+    // room.participants es una propiedad, no un Map
+    const remoteParticipants = Array.from(room.remoteParticipants.values());
+    console.log('👥 Lista de participantes actualizada:', remoteParticipants.length);
+    setParticipants(remoteParticipants);
+  } catch (error) {
+    console.error('❌ Error al actualizar participantes:', error);
+    setParticipants([]);
+  }
+};
 
   /**
    * Alternar video local
@@ -316,7 +400,85 @@ const VideoCall = ({
       }
     };
   }, [isConnected]);
+// ✨ NUEVO: Effect para adjuntar tracks cuando la lista de participantes cambia
 
+useEffect(() => {
+  console.log('🔄 useEffect ejecutandose. Room:', !!room, 'Participants:', participants.length);
+  if (!room || participants.length === 0) {
+    console.log('⚠️ useEffect: No hay room o participants');
+    return;
+  }
+
+  console.log('🔄 Lista de participantes actualizada, adjuntando tracks...');
+  console.log('📊 Número de participantes:', participants.length);
+
+  // Dar tiempo a React para renderizar los elementos
+  const timeoutId = setTimeout(() => {
+    participants.forEach((participant) => {
+      console.log('🔍 Verificando tracks de:', participant.identity);
+      
+      // 1. Verificar si el elemento existe
+      const videoElement = remoteVideosRef.current[participant.identity];
+      console.log('📺 Elemento de video existe?', !!videoElement);
+      console.log('📺 remoteVideosRef completo:', Object.keys(remoteVideosRef.current));
+      
+      if (!videoElement) {
+        console.warn('⚠️ Elemento aún no renderizado para:', participant.identity);
+        return;
+      }
+
+      // 2. Verificar tracks de video disponibles
+      console.log('🎥 participant.videoTracks:', participant.videoTracks);
+      const videoTracks = Array.from(participant.trackPublications?.values() || []).filter(pub => pub.kind === Track.Kind.Video);
+      console.log('🎥 Número de video tracks:', videoTracks.length);
+      
+      videoTracks.forEach((publication, idx) => {
+        console.log(`🎥 Track ${idx}:`, {
+          hasTrack: !!publication.track,
+          isSubscribed: publication.isSubscribed,
+          kind: publication.kind,
+          trackSid: publication.trackSid
+        });
+        
+        if (publication.track && publication.isSubscribed) {
+          const track = publication.track;
+          console.log('📹 Track details:', {
+            kind: track.kind,
+            sid: track.sid,
+            mediaStreamTrack: track.mediaStreamTrack,
+            attachedElements: track.attachedElements.length
+          });
+          
+          // Verificar si el track ya está adjuntado
+          if (!track.attachedElements.includes(videoElement)) {
+            console.log('🔗 Intentando adjuntar track...');
+            track.attach(videoElement);
+            console.log('✅ Video adjuntado via useEffect:', participant.identity);
+          } else {
+            console.log('ℹ️ Video ya estaba adjuntado:', participant.identity);
+          }
+        }
+      });
+
+      // 3. Verificar tracks de audio
+      const audioTracks = Array.from(participant.trackPublications?.values() || []).filter(pub => pub.kind === Track.Kind.Audio);
+      console.log('🔊 Número de audio tracks:', audioTracks.length);
+      
+      audioTracks.forEach((publication) => {
+        if (publication.track && publication.isSubscribed) {
+          if (publication.track.attachedElements.length === 0) {
+            publication.track.attach();
+            console.log('✅ Audio adjuntado via useEffect:', participant.identity);
+          }
+        }
+      });
+    });
+  }, 500); // Aumenté a 500ms para dar más tiempo
+
+  return () => clearTimeout(timeoutId);
+}, [participants, room]);
+
+// Ejecutar cuando participants o room cambien
   // Render de error
   if (error) {
     return (
@@ -398,6 +560,22 @@ const VideoCall = ({
                 ref={(el) => {
                   if (el) {
                     remoteVideosRef.current[participant.identity] = el;
+                    // ✨ NUEVO: Inmediatamente intentar adjuntar tracks cuando el elemento se monta
+                    console.log('📺 Elemento de video creado para:', participant.identity);
+          
+                    // Buscar tracks de video del participante
+                    const videoPublications = Array.from(
+  participant.trackPublications?.values() || []
+).filter(pub => pub.kind === Track.Kind.Video);
+
+if (videoPublications.length > 0) {
+  const publication = videoPublications[0];
+  if (publication.track && publication.isSubscribed) {
+    publication.track.attach(el);
+    console.log('✅ Video adjuntado inmediatamente:', participant.identity);
+  }
+}
+
                   }
                 }}
                 autoPlay

@@ -55,22 +55,15 @@ io.on('connection', (socket) => {
   });
 
   // Evento: Nuevo mensaje enviado
-  socket.on('message:send', (messageData) => {
-    const { chatId, message, senderId, senderName, encrypted, timestamp } = messageData;
-    
-    console.log(`💬 Nuevo mensaje en chat ${chatId} de ${senderName}`);
-    
-    // Emitir el mensaje a TODOS en el chat (incluyendo al remitente para sincronizar pestañas)
-    io.to(`chat_${chatId}`).emit('message:received', {
-      chatId,
-      message,
-      senderId,
-      senderName,
-      encrypted,
-      timestamp,
-      messageId: Date.now() // ID temporal hasta que se guarde en BD
-    });
+socket.on('message:send', (messageData) => {
+  console.log(`💬 Mensaje/Evento recibido:`, messageData);
+  
+  // Reenviar TODO el objeto completo sin destrucción
+  io.to(`chat_${messageData.chatId}`).emit('message:received', {
+    ...messageData,
+    messageId: messageData.messageId || Date.now()
   });
+});
 
   // Evento: Notificar que el mensaje fue guardado en BD
   socket.on('message:saved', (messageData) => {
