@@ -32,3 +32,6 @@ RewriteRule ^chats/enviar$ chats.php [L,QSA]
 RewriteRule ^videocall/token$ videocall.php [L,QSA]
 RewriteRule ^videocall/iniciar$ videocall.php [L,QSA]
 RewriteRule ^videocall/finalizar$ videocall.php [L,QSA]
+
+# Redirigir endpoint de archivos
+RewriteRule ^archivos/subir$ archivos.php [L,QSA]

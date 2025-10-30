@@ -123,6 +123,12 @@ const handleNewMessage = (messageData) => {
       isOwn: messageData.senderId === currentUserId,
       tipo_Mensaje: messageData.type || 'texto',
       cifrado: messageData.encrypted || false,
+
+        // Datos de archivo (si existe)
+      url_Archivo: messageData.url_Archivo || null,
+      nombre_Archivo: messageData.nombre_Archivo || null,
+      tamano_Archivo: messageData.tamano_Archivo || null,
+
     };
 
     console.log('📝 Mensaje formateado:', formattedMessage);
@@ -224,7 +230,11 @@ const loadMessages = async () => {
           // Identificar si es mensaje propio (CONVERSIÓN ARREGLADA)
           isOwn: esMio,  // ← USANDO LA COMPARACIÓN ARREGLADA
           id_Usuario: msg.id_Remitente,
-          id_Remitente: msg.id_Remitente
+          id_Remitente: msg.id_Remitente,
+            // Datos de archivo (si existe)
+          url_Archivo: msg.url_Archivo || null,
+          nombre_Archivo: msg.nombre_Archivo || null,
+          tamano_Archivo: msg.tamano_Archivo || null,
         };
 
         return formattedMsg;
@@ -308,15 +318,131 @@ const loadMessages = async () => {
   }
 };
 
-  const sendFile = (type) => {
-    console.log(`Enviando archivo de tipo: ${type}`);
-    alert(`Función de envío de ${type} - Próximamente disponible`);
+const sendFile = async (type) => {
+  // Crear input invisible para seleccionar archivo
+  const input = document.createElement('input');
+  input.type = 'file';
+  
+  // Configurar tipos aceptados según el botón clickeado
+  if (type === 'image') {
+    input.accept = 'image/*';
+  } else if (type === 'archivo') {
+    input.accept = '.pdf,.doc,.docx,.txt,.xlsx,.xls';
+  }
+  
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Validar tamaño (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('El archivo es muy grande (máx 10MB)');
+      return;
+    }
+    
+    try {
+      console.log('📤 Enviando archivo:', file.name);
+      
+      // Subir archivo
+      const formData = new FormData();
+      formData.append('archivo', file);
+      formData.append('id_Chat', chatData.id_Chat);
+      formData.append('tipo', type === 'image' ? 'imagen' : 'archivo');
+      formData.append('encriptado', encryptionEnabled);
+      
+      const response = await chatService.enviarArchivo(formData);
+      
+      if (response.success) {
+        console.log('✅ Archivo subido exitosamente:', response.data);
+        
+        // Emitir por WebSocket
+        if (isConnected) {
+          sendSocketMessage({
+            chatId: chatData.id_Chat,
+            message: file.name,
+            senderId: currentUserId,
+            senderName: userName,
+            messageId: response.data.id_Mensaje,
+            timestamp: new Date().toISOString(),
+            type: response.data.tipo_Mensaje,
+            encrypted: encryptionEnabled,
+            fileUrl: response.data.url_Archivo,
+            fileName: response.data.nombre_Archivo,
+            fileSize: response.data.tamano_Archivo
+          });
+        } else {
+          await loadMessages();
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error al enviar archivo:', error);
+      alert('Error al enviar el archivo: ' + error.message);
+    }
   };
+  
+  input.click();
+};
 
-  const shareLocation = () => {
-    console.log("Compartiendo ubicación");
-    alert("Compartiendo ubicación actual...");
-  };
+const shareLocation = async () => {
+  if (!navigator.geolocation) {
+    alert('Tu navegador no soporta geolocalización');
+    return;
+  }
+
+  console.log('📍 Obteniendo ubicación...');
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      
+      // Crear el link de Google Maps directamente
+      const googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+      
+      // El mensaje será el link completo
+      const ubicacionTexto = googleMapsLink;
+
+      try {
+        console.log('📤 Enviando ubicación:', ubicacionTexto);
+
+        // Guardar en base de datos
+        const response = await chatService.enviarMensaje(
+          chatData.id_Chat,
+          ubicacionTexto,
+          encryptionEnabled,
+          'ubicacion'
+        );
+
+        if (response.success) {
+          console.log('✅ Ubicación enviada exitosamente');
+
+          // Emitir por WebSocket
+          if (isConnected) {
+            sendSocketMessage({
+              chatId: chatData.id_Chat,
+              message: ubicacionTexto,
+              senderId: currentUserId,
+              senderName: userName,
+              messageId: response.data?.id_Mensaje || Date.now(),
+              timestamp: new Date().toISOString(),
+              type: 'ubicacion',
+              encrypted: encryptionEnabled
+            });
+          } else {
+            await loadMessages();
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error al enviar ubicación:', error);
+        alert('Error al enviar la ubicación: ' + error.message);
+      }
+    },
+    (error) => {
+      console.error('❌ Error al obtener ubicación:', error);
+      alert('No se pudo obtener tu ubicación. Verifica los permisos del navegador.');
+    }
+  );
+};
 
 const startVideoCall = async () => {
   console.log("📞 Iniciando videollamada y notificando...");
@@ -588,10 +714,75 @@ return (
                               {messageSender}
                             </p>
                           )}
-                          <p className="break-words">
-                            {msg.encrypted && "🔒 "}
-                            {messageContent}
-                          </p>
+{/* Renderizado según tipo de mensaje */}
+{(() => {
+  const tipoMensaje = msg.tipo_Mensaje || msg.tipo || 'texto';
+  
+  if (tipoMensaje === 'imagen') {
+    return (
+      <div>
+        <img 
+          src={msg.url_Archivo} 
+          alt={msg.nombre_Archivo || 'Imagen'}
+          className="rounded-lg mb-2 max-w-full cursor-pointer hover:opacity-90 transition-opacity"
+          style={{ maxHeight: '300px', objectFit: 'contain' }}
+          onClick={() => window.open(msg.url_Archivo, '_blank')}
+        />
+        <p className="text-xs opacity-75">{msg.nombre_Archivo}</p>
+      </div>
+    );
+  } else if (tipoMensaje === 'archivo') {
+    return (
+      <div className="flex items-center space-x-3 p-2 bg-opacity-20 bg-black rounded-lg">
+        <FileText className="w-8 h-8 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold truncate">{msg.nombre_Archivo}</p>
+          <p className="text-xs opacity-75">
+            {msg.tamano_Archivo ? (msg.tamano_Archivo / 1024 / 1024).toFixed(2) + ' MB' : 'Archivo'}
+          </p>
+        </div>
+        <a 
+          href={msg.url_Archivo} 
+          download
+          className="flex-shrink-0 hover:opacity-80 transition-opacity"
+          title="Descargar"
+        >
+          📥
+        </a>
+      </div>
+    );
+} else if (tipoMensaje === 'ubicacion') {
+  // Asegurarse de que el link comience con http:// o https://
+  let locationUrl = messageContent;
+  if (!locationUrl.startsWith('http://') && !locationUrl.startsWith('https://')) {
+    // Si son solo coordenadas, construir el link
+    locationUrl = `https://www.google.com/maps?q=${messageContent}`;
+  }
+  
+  return (
+    <div>
+      <p className="mb-2">📍 Ubicación compartida</p>
+      <a 
+        href={locationUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`text-xs underline hover:opacity-80 block ${
+          msg.isOwn ? 'text-blue-100' : 'text-blue-600'
+        }`}
+      >
+        🗺️ Ver en Google Maps
+      </a>
+    </div>
+  );
+  } else {
+    return (
+      <p className="break-words">
+        {msg.encrypted && "🔒 "}
+        {messageContent}
+      </p>
+    );
+  }
+})()}
                           <p
                             className={`text-xs mt-1 ${
                               msg.isOwn ? "text-blue-100" : "text-gray-500"
@@ -612,12 +803,30 @@ return (
           {/* Input de mensajes */}
           <div className="bg-white border-t border-gray-200 p-4">
             <div className="flex items-center space-x-2">
-              <button
-                onClick={() => sendFile("image")}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Paperclip className="w-5 h-5" />
-              </button>
+{/* Botones de archivos */}
+<div className="flex items-center space-x-2">
+  <button
+    onClick={() => sendFile("image")}
+    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+    title="Enviar imagen"
+  >
+    <Image className="w-5 h-5" />
+  </button>
+  <button
+    onClick={() => sendFile("archivo")}
+    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+    title="Enviar archivo"
+  >
+    <FileText className="w-5 h-5" />
+  </button>
+  <button
+    onClick={shareLocation}
+    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+    title="Compartir ubicación"
+  >
+    <MapPin className="w-5 h-5" />
+  </button>
+</div>
               <input
                 type="text"
                 value={message}

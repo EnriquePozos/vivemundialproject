@@ -19,6 +19,9 @@ export const API_ENDPOINTS = {
   USUARIOS: { // NUEVO: Endpoint de usuarios
     TODOS: `${API_BASE_URL}/perfil/todos`,
   },
+  ARCHIVOS: {
+  SUBIR: `${API_BASE_URL}/archivos/subir`,
+},
 };
 
 // Función para hacer peticiones con token
@@ -172,6 +175,40 @@ export const chatService = {
       }),
     });
   },
+  // Enviar archivo (imagen o documento)
+enviarArchivo: async (formData) => {
+  const token = localStorage.getItem('token');
+  
+  const headers = {
+    'ngrok-skip-browser-warning': 'true',
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(API_ENDPOINTS.ARCHIVOS.SUBIR, {
+    method: 'POST',
+    headers: headers,
+    body: formData, // FormData NO necesita Content-Type
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await response.text();
+    throw new Error(`Respuesta no JSON (status ${response.status}): ${text.substring(0, 200)}`);
+  }
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || 'Error al subir archivo');
+  }
+
+  return data;
+},
+
+
 };
 
 //Servicio para usuarios
