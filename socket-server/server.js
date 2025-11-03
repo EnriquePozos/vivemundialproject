@@ -64,7 +64,60 @@ socket.on('message:send', (messageData) => {
     messageId: messageData.messageId || Date.now()
   });
 });
+// ============================================
+  // EVENTOS DE QUINIELAS
+  // ============================================
 
+  /**
+   * Evento: quiniela:added
+   * Cuando se agrega una quiniela a un chat
+   */
+  socket.on('quiniela:added', (data) => {
+    console.log('🏆 Quiniela agregada al chat:', data);
+    
+    // Emitir a todos los usuarios del chat
+    io.to(`chat_${data.id_Chat}`).emit('message:received', {
+      type: 'quiniela_added',
+      chatId: data.id_Chat,
+      quiniela: data.quiniela,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  /**
+   * Evento: quiniela:participated
+   * Cuando un usuario participa en una quiniela
+   */
+  socket.on('quiniela:participated', (data) => {
+    console.log('🎲 Usuario participó en quiniela:', data);
+    
+    // Emitir a todos los usuarios del chat
+    io.to(`chat_${data.id_Chat}`).emit('message:received', {
+      type: 'quiniela_participated',
+      chatId: data.id_Chat,
+      id_Quiniela_Chat: data.id_Quiniela_Chat,
+      usuario: data.usuario,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  /**
+   * Evento: quiniela:finished
+   * Cuando una quiniela es finalizada
+   */
+  socket.on('quiniela:finished', (data) => {
+    console.log('🏁 Quiniela finalizada:', data);
+    
+    // Emitir a todos los usuarios del chat
+    io.to(`chat_${data.id_Chat}`).emit('message:received', {
+      type: 'quiniela_finished',
+      chatId: data.id_Chat,
+      id_Quiniela_Chat: data.id_Quiniela_Chat,
+      resultado: data.resultado,
+      ganadores: data.ganadores,
+      timestamp: new Date().toISOString()
+    });
+  });
   // Evento: Notificar que el mensaje fue guardado en BD
   socket.on('message:saved', (messageData) => {
     const { chatId, messageId, dbMessageId } = messageData;

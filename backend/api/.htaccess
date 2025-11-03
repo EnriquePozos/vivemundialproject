@@ -35,3 +35,13 @@ RewriteRule ^videocall/finalizar$ videocall.php [L,QSA]
 
 # Redirigir endpoint de archivos
 RewriteRule ^archivos/subir$ archivos.php [L,QSA]
+
+# Redirigir endpoints de quinielas
+RewriteRule ^quinielas/disponibles$ quinielas.php?ruta=disponibles [L,QSA]
+RewriteRule ^quinielas/agregar$ quinielas.php?ruta=agregar [L,QSA]
+RewriteRule ^quinielas/listar$ quinielas.php?ruta=listar [L,QSA]
+RewriteRule ^quinielas/participar$ quinielas.php?ruta=participar [L,QSA]
+RewriteRule ^quinielas/finalizar$ quinielas.php?ruta=finalizar [L,QSA]
+RewriteRule ^quinielas/detalles$ quinielas.php?ruta=detalles [L,QSA]
+RewriteRule ^quinielas/participaciones$ quinielas.php?ruta=participaciones [L,QSA]
+RewriteRule ^quinielas/mi-participacion$ quinielas.php?ruta=mi-participacion [L,QSA]

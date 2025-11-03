@@ -34,6 +34,7 @@ import videoCallService from "../services/videoCallService";
 import { useSocket } from "../hooks/useSocket";
 import VideoCall from "./VideoCall"; // Componente de videollamadas
 import tareaService from "../services/tareaService";
+import quinielaService from "../services/quinielaService";
 
 // Componente de Chat Privado integrado
 const PrivateChat = ({
@@ -141,6 +142,41 @@ if (messageData.type === 'task_completed' && messageData.chatId === chatData.id_
   loadTasks(chatData.id_Chat);
   return;
 }
+// Detectar cuando se agrega una quiniela
+      if (messageData.type === 'quiniela_added' && messageData.chatId === chatData.id_Chat) {
+        console.log('🏆 Nueva quiniela agregada al chat');
+        if (window.loadQuinielasFromSocket) {
+          window.loadQuinielasFromSocket(chatData.id_Chat);
+        }
+        return;
+      }
+
+      // Detectar cuando alguien participa en una quiniela
+      if (messageData.type === 'quiniela_participated' && messageData.chatId === chatData.id_Chat) {
+        console.log('🎲 Usuario participó en quiniela:', messageData.usuario);
+        if (window.loadQuinielasFromSocket) {
+          window.loadQuinielasFromSocket(chatData.id_Chat);
+        }
+        return;
+      }
+
+      // Detectar cuando una quiniela es finalizada
+      if (messageData.type === 'quiniela_finished' && messageData.chatId === chatData.id_Chat) {
+        console.log('🏁 Quiniela finalizada');
+        
+        const ganadores = messageData.ganadores || [];
+        if (ganadores.length > 0) {
+          const nombresGanadores = ganadores.map(g => g.nombre).join(', ');
+          alert(`🏆 Quiniela finalizada!\nResultado: ${messageData.resultado}\nGanadores: ${nombresGanadores}`);
+        } else {
+          alert(`🏁 Quiniela finalizada!\nResultado: ${messageData.resultado}\nNo hubo ganadores.`);
+        }
+        
+        if (window.loadQuinielasFromSocket) {
+          window.loadQuinielasFromSocket(chatData.id_Chat);
+        }
+        return;
+      }
       // Solo agregar si es del chat actual y es mensaje normal
       if (
         messageData.chatId === chatData.id_Chat &&
@@ -1254,6 +1290,8 @@ const Dashboard = ({ onLogout }) => {
   const [userPoints, setUserPoints] = useState(0);
   const [allUsers, setAllUsers] = useState([]); // <--- NUEVO: Estado para todos los usuarios de la DB
 
+  
+
   const shopRef = useRef(null);
 
   // Socket.IO - Conexión global al Dashboard
@@ -1350,31 +1388,6 @@ const Dashboard = ({ onLogout }) => {
     };
   }, [isConnected]);
 
-  // Mock de quinielas y tareas (ahora en Dashboard para mostrarse en el sidebar derecho)
-  const [quinielas, setQuinielas] = useState([
-    {
-      id: 1,
-      name: "Argentina vs Francia",
-      description: "¿Quién ganará la final?",
-      participants: 2,
-      totalPoints: 1000,
-      userBet: 500,
-      status: "active",
-      endTime: "2024-03-20 16:00",
-      createdBy: "Ana García",
-    },
-    {
-      id: 2,
-      name: "Goleador del partido",
-      description: "¿Quién anotará primero?",
-      participants: 2,
-      totalPoints: 600,
-      userBet: null,
-      status: "active",
-      endTime: "2024-03-20 15:00",
-      createdBy: "Tú",
-    },
-  ]);
 
 const [tasks, setTasks] = useState([]);
 const [loadingTasks, setLoadingTasks] = useState(false);
@@ -1385,7 +1398,23 @@ const [newTaskData, setNewTaskData] = useState({
   puntos_Recompensa: 10
 });
 
+// ============================================
+  // ESTADOS PARA QUINIELAS
+  // ============================================
+  const [quinielas, setQuinielas] = useState([]);
+  const [loadingQuinielas, setLoadingQuinielas] = useState(false);
+  const [quinielasDisponibles, setQuinielasDisponibles] = useState([]);
   const [showNewQuinielaModal, setShowNewQuinielaModal] = useState(false);
+  const [showParticipateModal, setShowParticipateModal] = useState(false);
+  const [showFinalizarModal, setShowFinalizarModal] = useState(false);
+  const [quinielaSeleccionada, setQuinielaSeleccionada] = useState(null);
+  const [participacionData, setParticipacionData] = useState({
+    puntos: '',
+    prediccion: ''
+  });
+  const [finalizarData, setFinalizarData] = useState({
+    resultado: ''
+  });
 
   // Cargar usuario actual
   useEffect(() => {
@@ -1619,6 +1648,218 @@ const [newTaskData, setNewTaskData] = useState({
     }
   };
 
+  // FUNCIÓN: CARGAR QUINIELAS DEL CHAT
+  const loadQuinielas = async (id_Chat) => {
+    if (!id_Chat) return;
+
+    try {
+      setLoadingQuinielas(true);
+      console.log('📊 Cargando quinielas del chat:', id_Chat);
+
+      const response = await quinielaService.listarPorChat(id_Chat);
+      
+      if (response.success) {
+        const quinielasFormateadas = response.data.quinielas.map(q => ({
+          id: q.id_Quiniela_Chat,
+          id_Quiniela: q.id_Quiniela,
+          name: q.nombre,
+          description: q.descripcion,
+          participants: parseInt(q.total_participantes) || 0,
+          totalPoints: parseInt(q.total_puntos_apostados) || 0,
+          status: q.estado, // 'activa' o 'finalizada'
+          resultado: q.resultado,
+          agregadoPor: q.agregado_Por,
+          agregador: q.agregador,
+          tipo: q.tipo
+        }));
+
+        setQuinielas(quinielasFormateadas);
+        console.log('✅ Quinielas cargadas:', quinielasFormateadas);
+      }
+    } catch (error) {
+      console.error('❌ Error al cargar quinielas:', error);
+      alert('Error al cargar quinielas: ' + error.message);
+    } finally {
+      setLoadingQuinielas(false);
+    }
+  };
+    // Exponer función globalmente para que PrivateChat pueda usarla
+  useEffect(() => {
+    window.loadQuinielasFromSocket = loadQuinielas;
+    
+    return () => {
+      delete window.loadQuinielasFromSocket;
+    };
+  }, []);
+ // FUNCIÓN: CARGAR QUINIELAS DISPONIBLES
+  const loadQuinielasDisponibles = async () => {
+    try {
+      console.log('📋 Cargando quinielas disponibles...');
+
+      const response = await quinielaService.listarDisponibles();
+      
+      if (response.success) {
+        setQuinielasDisponibles(response.data.quinielas);
+        console.log('✅ Quinielas disponibles:', response.data.quinielas);
+      }
+    } catch (error) {
+      console.error('❌ Error al cargar quinielas disponibles:', error);
+      alert('Error al cargar quinielas disponibles: ' + error.message);
+    }
+  };
+   // FUNCIÓN: AGREGAR QUINIELA AL CHAT
+  const handleAgregarQuiniela = async (id_Quiniela) => {
+    if (!selectedChat) return;
+
+    try {
+      console.log('➕ Agregando quiniela al chat:', { id_Quiniela, id_Chat: selectedChat.id });
+
+      const response = await quinielaService.agregarAChat(id_Quiniela, selectedChat.id);
+      
+      if (response.success) {
+        alert('✅ Quiniela agregada exitosamente al chat');
+        
+        // Recargar quinielas del chat
+        await loadQuinielas(selectedChat.id);
+        
+        // Cerrar modal
+        setShowNewQuinielaModal(false);
+
+        // Emitir evento WebSocket
+        if (socket) {
+          socket.emit('quiniela:added', {
+            id_Chat: selectedChat.id,
+            quiniela: response.data.quiniela
+          });
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error al agregar quiniela:', error);
+      alert('Error al agregar quiniela: ' + error.message);
+    }
+  };
+    // FUNCIÓN: PARTICIPAR EN QUINIELA
+  const handleParticiparQuiniela = async () => {
+    if (!quinielaSeleccionada) return;
+
+    // Validaciones
+    if (!participacionData.puntos || participacionData.puntos <= 0) {
+      alert('⚠️ Debes ingresar una cantidad de puntos válida');
+      return;
+    }
+
+    if (!participacionData.prediccion || participacionData.prediccion.trim() === '') {
+      alert('⚠️ Debes ingresar tu predicción');
+      return;
+    }
+
+    try {
+      console.log('🎲 Participando en quiniela:', {
+        id_Quiniela_Chat: quinielaSeleccionada.id,
+        puntos: participacionData.puntos,
+        prediccion: participacionData.prediccion
+      });
+
+      const response = await quinielaService.participar(
+        quinielaSeleccionada.id,
+        parseInt(participacionData.puntos),
+        participacionData.prediccion
+      );
+      
+      if (response.success) {
+        alert(`✅ Participación registrada! Apostaste ${participacionData.puntos} puntos`);
+        
+        // Actualizar puntos del usuario
+        const nuevosPuntos = user.Puntos - parseInt(participacionData.puntos);
+        setUser({ ...user, Puntos: nuevosPuntos });
+        
+        // Recargar quinielas del chat
+        await loadQuinielas(selectedChat.id);
+        
+        // Cerrar modal y limpiar datos
+        setShowParticipateModal(false);
+        setQuinielaSeleccionada(null);
+        setParticipacionData({ puntos: '', prediccion: '' });
+
+        // Emitir evento WebSocket
+        if (socket) {
+          socket.emit('quiniela:participated', {
+            id_Chat: selectedChat.id,
+            id_Quiniela_Chat: quinielaSeleccionada.id,
+            usuario: user.nombre_Usuario
+          });
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error al participar en quiniela:', error);
+      alert('Error al participar: ' + error.message);
+    }
+  };
+
+  // FUNCIÓN: FINALIZAR QUINIELA
+  const handleFinalizarQuiniela = async () => {
+    if (!quinielaSeleccionada) return;
+
+    // Validación
+    if (!finalizarData.resultado || finalizarData.resultado.trim() === '') {
+      alert('⚠️ Debes ingresar el resultado de la quiniela');
+      return;
+    }
+
+    try {
+      console.log('🏁 Finalizando quiniela:', {
+        id_Quiniela_Chat: quinielaSeleccionada.id,
+        resultado: finalizarData.resultado
+      });
+
+      const response = await quinielaService.finalizar(
+        quinielaSeleccionada.id,
+        finalizarData.resultado
+      );
+      
+      if (response.success) {
+        const ganadores = response.data.ganadores || [];
+        const totalGanadores = response.data.total_ganadores || 0;
+
+        let mensaje = `✅ Quiniela finalizada!\n\n`;
+        mensaje += `Resultado: ${response.data.resultado}\n`;
+        mensaje += `Total de ganadores: ${totalGanadores}\n\n`;
+        
+        if (ganadores.length > 0) {
+          mensaje += `🏆 Ganadores:\n`;
+          ganadores.forEach(g => {
+            mensaje += `- ${g.nombre}: Apostó ${g.apostado} pts, ganó ${g.premio} pts\n`;
+          });
+        } else {
+          mensaje += `No hubo ganadores en esta quiniela.`;
+        }
+
+        alert(mensaje);
+        
+        // Recargar quinielas del chat
+        await loadQuinielas(selectedChat.id);
+        
+        // Cerrar modal y limpiar datos
+        setShowFinalizarModal(false);
+        setQuinielaSeleccionada(null);
+        setFinalizarData({ resultado: '' });
+
+        // Emitir evento WebSocket
+        if (socket) {
+          socket.emit('quiniela:finished', {
+            id_Chat: selectedChat.id,
+            id_Quiniela_Chat: quinielaSeleccionada.id,
+            resultado: response.data.resultado,
+            ganadores: ganadores
+          });
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error al finalizar quiniela:', error);
+      alert('Error al finalizar quiniela: ' + error.message);
+    }
+  };
+
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -1735,6 +1976,14 @@ const [newTaskData, setNewTaskData] = useState({
       <span className="font-medium">{alertMessage}</span>
     </div>
   );
+  // useEffect: CARGAR QUINIELAS AL SELECCIONAR CHAT
+  useEffect(() => {
+    if (selectedChat) {
+      loadQuinielas(selectedChat.id);
+    } else {
+      setQuinielas([]);
+    }
+  }, [selectedChat]);
 
   const NewQuinielaModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -2009,35 +2258,100 @@ const [newTaskData, setNewTaskData] = useState({
                   </button>
                 </div>
 
-                <div className="space-y-4 mb-6">
-                  {quinielas.map((q) => (
-                    <div
-                      key={q.id}
-                      className="bg-white rounded-xl p-4 border border-gray-200 hover:shadow-lg transition-shadow"
+                {/* SECCIÓN DE QUINIELAS - INTEGRADA CON BACKEND */}
+                {loadingQuinielas ? (
+                  <div className="text-center text-gray-500 py-4 mb-6">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                    <p className="text-sm">Cargando quinielas...</p>
+                  </div>
+                ) : quinielas.length === 0 ? (
+                  <div className="text-center text-gray-500 py-4 mb-6">
+                    <Trophy className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No hay quinielas aún</p>
+                    <button
+                      onClick={() => {
+                        loadQuinielasDisponibles();
+                        setShowNewQuinielaModal(true);
+                      }}
+                      className="mt-3 text-blue-600 hover:underline text-sm"
                     >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-800">
-                            {q.name}
-                          </h4>
-                          <p className="text-xs text-gray-600 mt-1">
-                            {q.description}
-                          </p>
+                      Agregar primera quiniela
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4 mb-6">
+                    {quinielas.map((q) => (
+                      <div
+                        key={q.id}
+                        className={`bg-white rounded-xl p-4 border-2 transition-shadow ${
+                          q.status === 'finalizada' 
+                            ? 'border-gray-300 bg-gray-50' 
+                            : 'border-blue-200 hover:shadow-lg'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-800">
+                              {q.name}
+                            </h4>
+                            <p className="text-xs text-gray-600 mt-1">
+                              {q.description}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Agregado por: {q.agregador}
+                            </p>
+                            {q.status === 'finalizada' && q.resultado && (
+                              <p className="text-xs text-green-600 font-semibold mt-1">
+                                ✅ Resultado: {q.resultado}
+                              </p>
+                            )}
+                          </div>
+                          <Trophy className={`w-5 h-5 ${q.status === 'finalizada' ? 'text-gray-400' : 'text-yellow-500'}`} />
                         </div>
-                        <Trophy className="w-5 h-5 text-yellow-500" />
-                      </div>
-                      <div className="flex items-center justify-between text-sm text-gray-600">
-                        <span>{q.participants} participantes</span>
-                        <div className="flex items-center space-x-1 text-yellow-600">
-                          <Coins className="w-4 h-4" />
-                          <span className="font-medium">
-                            {q.totalPoints} pts
-                          </span>
+                        <div className="flex items-center justify-between text-sm text-gray-600 mb-3">
+                          <span>{q.participants} participantes</span>
+                          <div className="flex items-center space-x-1 text-yellow-600">
+                            <Coins className="w-4 h-4" />
+                            <span className="font-medium">
+                              {q.totalPoints} pts
+                            </span>
+                          </div>
                         </div>
+                        
+                        {/* Botones de acción */}
+                        {q.status === 'activa' && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setQuinielaSeleccionada(q);
+                                setShowParticipateModal(true);
+                              }}
+                              className="flex-1 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                            >
+                              Participar
+                            </button>
+                            {q.agregadoPor === user.id_Usuario && (
+                              <button
+                                onClick={() => {
+                                  setQuinielaSeleccionada(q);
+                                  setShowFinalizarModal(true);
+                                }}
+                                className="flex-1 py-2 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                              >
+                                Finalizar
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {q.status === 'finalizada' && (
+                          <div className="py-2 text-center text-sm bg-gray-200 text-gray-600 rounded-lg">
+                            Quiniela Finalizada
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* ============================================ */}
                 {/* SECCIÓN DE TAREAS - MODIFICADA */}
@@ -2234,6 +2548,222 @@ const [newTaskData, setNewTaskData] = useState({
     setTaskData={setNewTaskData}
   />
 )}
+{/* ============================================ */}
+      {/* MODALES DE QUINIELAS */}
+      {/* ============================================ */}
+      
+      {/* Modal: Agregar Quiniela */}
+      {showNewQuinielaModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">
+              🏆 Agregar Quiniela al Chat
+            </h3>
+
+            <p className="text-sm text-gray-600 mb-4">
+              Selecciona una quiniela disponible para agregarla a este chat:
+            </p>
+
+            {quinielasDisponibles.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Trophy className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No hay quinielas disponibles en este momento</p>
+              </div>
+            ) : (
+              <div className="space-y-3 mb-4">
+                {quinielasDisponibles.map((q) => (
+                  <div
+                    key={q.id_Quiniela}
+                    className="border-2 border-gray-200 rounded-lg p-4 hover:border-blue-500 transition-colors cursor-pointer"
+                    onClick={() => handleAgregarQuiniela(q.id_Quiniela)}
+                  >
+                    <h4 className="font-semibold text-gray-800">{q.nombre}</h4>
+                    <p className="text-sm text-gray-600 mt-1">{q.descripcion}</p>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-xs text-gray-500">Tipo: {q.tipo}</span>
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        q.activa ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {q.activa ? 'Disponible' : 'No disponible'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={() => {
+                setShowNewQuinielaModal(false);
+                setQuinielasDisponibles([]);
+              }}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Participar en Quiniela */}
+      {showParticipateModal && quinielaSeleccionada && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">
+              🎲 Participar en Quiniela
+            </h3>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <h4 className="font-semibold text-gray-800">{quinielaSeleccionada.name}</h4>
+              <p className="text-sm text-gray-600 mt-1">{quinielaSeleccionada.description}</p>
+              <div className="flex items-center justify-between mt-3 text-sm">
+                <span className="text-gray-600">
+                  {quinielaSeleccionada.participants} participantes
+                </span>
+                <div className="flex items-center space-x-1 text-yellow-600">
+                  <Coins className="w-4 h-4" />
+                  <span className="font-medium">{quinielaSeleccionada.totalPoints} pts</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Puntos a apostar */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Puntos a apostar *
+                </label>
+                <input
+                  type="number"
+                  value={participacionData.puntos}
+                  onChange={(e) => setParticipacionData({ ...participacionData, puntos: e.target.value })}
+                  placeholder="Ej: 100"
+                  min="1"
+                  max={user.Puntos}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Tienes {user.Puntos} puntos disponibles
+                </p>
+                <p className="text-xs text-green-600 mt-1">
+                  💰 Ganarás: {participacionData.puntos ? Math.floor(participacionData.puntos * 1.5) : 0} puntos si aciertas
+                </p>
+              </div>
+
+              {/* Predicción */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tu predicción *
+                </label>
+                <input
+                  type="text"
+                  value={participacionData.prediccion}
+                  onChange={(e) => setParticipacionData({ ...participacionData, prediccion: e.target.value })}
+                  placeholder="Ej: Argentina"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
+                  maxLength="255"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Ingresa tu respuesta a la quiniela
+                </p>
+              </div>
+            </div>
+
+            {/* Botones */}
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowParticipateModal(false);
+                  setQuinielaSeleccionada(null);
+                  setParticipacionData({ puntos: '', prediccion: '' });
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleParticiparQuiniela}
+                disabled={!participacionData.puntos || !participacionData.prediccion}
+                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Finalizar Quiniela */}
+      {showFinalizarModal && quinielaSeleccionada && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">
+              🏁 Finalizar Quiniela
+            </h3>
+
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+              <h4 className="font-semibold text-gray-800">{quinielaSeleccionada.name}</h4>
+              <p className="text-sm text-gray-600 mt-1">{quinielaSeleccionada.description}</p>
+              <div className="flex items-center justify-between mt-3 text-sm">
+                <span className="text-gray-600">
+                  {quinielaSeleccionada.participants} participantes
+                </span>
+                <div className="flex items-center space-x-1 text-yellow-600">
+                  <Coins className="w-4 h-4" />
+                  <span className="font-medium">{quinielaSeleccionada.totalPoints} pts apostados</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+              <p className="text-sm text-yellow-800">
+                ⚠️ Al finalizar, se repartirán los premios a los ganadores (x1.5 de lo apostado)
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {/* Resultado */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Resultado de la quiniela *
+                </label>
+                <input
+                  type="text"
+                  value={finalizarData.resultado}
+                  onChange={(e) => setFinalizarData({ resultado: e.target.value })}
+                  placeholder="Ej: Argentina"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-black"
+                  maxLength="255"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Ingresa el resultado real de la quiniela
+                </p>
+              </div>
+            </div>
+
+            {/* Botones */}
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowFinalizarModal(false);
+                  setQuinielaSeleccionada(null);
+                  setFinalizarData({ resultado: '' });
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleFinalizarQuiniela}
+                disabled={!finalizarData.resultado}
+                className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                Finalizar Quiniela
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

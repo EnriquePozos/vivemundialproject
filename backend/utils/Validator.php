@@ -137,5 +137,31 @@ class Validator {
         $this->errors = [];
         return $this;
     }
+    public static function validarCamposRequeridos($data, $camposRequeridos) {
+    $camposFaltantes = [];
+    
+    foreach ($camposRequeridos as $campo) {
+        if (!isset($data[$campo])) {
+            $camposFaltantes[] = $campo;
+            continue;
+        }
+        
+        if (is_string($data[$campo]) && trim($data[$campo]) === '') {
+            $camposFaltantes[] = $campo;
+        }
+    }
+    
+    if (count($camposFaltantes) > 0) {
+        return [
+            'valido' => false,
+            'mensaje' => 'Faltan campos requeridos: ' . implode(', ', $camposFaltantes)
+        ];
+    }
+    
+    return [
+        'valido' => true,
+        'mensaje' => 'Validación exitosa'
+    ];
+}
 }
 ?>
