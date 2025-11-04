@@ -88,7 +88,8 @@ return {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify({
           id_Quiniela,
@@ -111,41 +112,72 @@ return {
     }
   },
 
-  /**
-   * Listar quinielas de un chat específico
-   * @param {number} id_Chat - ID del chat
-   */
-  listarPorChat: async (id_Chat) => {
-    try {
-      const token = localStorage.getItem('token');
-      
-      const response = await fetch(`${API_BASE_URL}/quinielas.php?ruta=listar&id_Chat=${id_Chat}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      const data = await response.json();
-      
-      console.log('📡 Respuesta listar:', data);
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Error al obtener quinielas del chat');
+/**
+ * Listar quinielas de un chat específico
+ * @param {number} id_Chat - ID del chat
+ */
+listarPorChat: async (id_Chat) => {
+  try {
+    const token = localStorage.getItem('token');
+    
+    console.log('🔍 listarPorChat - Parámetros:', { id_Chat, token: token ? 'Presente' : 'Ausente' });
+    
+    const url = `${API_BASE_URL}/quinielas.php?ruta=listar&id_Chat=${id_Chat}`;
+    console.log('🔍 URL completa:', url);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'ngrok-skip-browser-warning': 'true'
       }
+    });
 
-return {
-  success: true,
-  data: {
-    quinielas: data.message?.quinielas || data.data?.quinielas || []
-  }
-};
-    } catch (error) {
-      console.error('Error en listarPorChat:', error);
-      throw error;
+    console.log('🔍 Response status:', response.status);
+    console.log('🔍 Response ok:', response.ok);
+    console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()));
+
+    // Leer la respuesta como texto primero
+    const textResponse = await response.text();
+    console.log('📄 RESPUESTA CRUDA (primeros 1000 chars):', textResponse.substring(0, 1000));
+    
+    // Verificar si es HTML
+    if (textResponse.trim().startsWith('<!DOCTYPE') || textResponse.trim().startsWith('<')) {
+      console.error('❌ ERROR: El backend devolvió HTML en lugar de JSON');
+      console.error('📄 HTML COMPLETO:', textResponse);
+      throw new Error('El servidor devolvió HTML. Revisa los logs de PHP en Apache.');
     }
-  },
+    
+    // Intentar parsear como JSON
+    let data;
+    try {
+      data = JSON.parse(textResponse);
+      console.log('✅ JSON parseado correctamente:', data);
+    } catch (parseError) {
+      console.error('❌ Error al parsear JSON:', parseError);
+      console.error('📄 Texto que intentó parsear:', textResponse);
+      throw new Error('Respuesta inválida del servidor: ' + parseError.message);
+    }
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Error al obtener quinielas del chat');
+    }
+
+    return {
+      success: true,
+      data: {
+        quinielas: data.message?.quinielas || data.data?.quinielas || []
+      }
+    };
+  } catch (error) {
+    console.error('❌ Error COMPLETO en listarPorChat:', error);
+    console.error('❌ Error name:', error.name);
+    console.error('❌ Error message:', error.message);
+    console.error('❌ Error stack:', error.stack);
+    throw error;
+  }
+},
 
   /**
    * Participar en una quiniela
@@ -161,7 +193,8 @@ return {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify({
           id_Quiniela_Chat,
@@ -198,7 +231,8 @@ return {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify({
           id_Quiniela_Chat,
@@ -233,7 +267,8 @@ return {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'ngrok-skip-browser-warning': 'true'
         }
       });
 
@@ -264,7 +299,8 @@ return {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'ngrok-skip-browser-warning': 'true'
         }
       });
 
@@ -295,7 +331,8 @@ return {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'ngrok-skip-browser-warning': 'true'
         }
       });
 

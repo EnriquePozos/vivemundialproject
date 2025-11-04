@@ -81,8 +81,8 @@ public function listarDisponibles() {
 
             // Agregar quiniela al chat
             $query = "INSERT INTO " . $this->table_quinielas_chat . " 
-                      (id_Chat, id_Quiniela, agregado_Por, estado, fecha_Agregado) 
-                      VALUES (:id_Chat, :id_Quiniela, :agregado_Por, 'activa', NOW())";
+                      (id_Chat, id_Quiniela, agregado_Por, estado) 
+                      VALUES (:id_Chat, :id_Quiniela, :agregado_Por, 'activa')";
             
             $stmt = $this->conn->prepare($query);
             $stmt->bindParam(':id_Chat', $id_Chat);
@@ -100,42 +100,64 @@ public function listarDisponibles() {
         }
     }
 
-    /**
-     * Listar quinielas de un chat (solo las de ese chat específico)
-     */
-    public function listarPorChat($id_Chat) {
-        try {
-            $query = "SELECT 
-                        qc.id_Quiniela_Chat,
-                        qc.id_Quiniela,
-                        qc.estado,
-                        qc.fecha_Agregado,
-                        qc.agregado_Por,
-                        q.nombre,
-                        q.descripcion,
-                        q.tipo,
-                        q.resultado,
-                        u.nombre_Usuario AS agregador,
-                        COUNT(DISTINCT pq.id_Participacion) as total_participantes,
-                        SUM(pq.puntos_Apostados) as total_puntos_apostados
-                      FROM " . $this->table_quinielas_chat . " qc
-                      INNER JOIN " . $this->table_quinielas . " q ON qc.id_Quiniela = q.id_Quiniela
-                      LEFT JOIN Usuario u ON qc.agregado_Por = u.id_Usuario
-                      LEFT JOIN " . $this->table_participaciones . " pq ON qc.id_Quiniela_Chat = pq.id_Quiniela_Chat
-                      WHERE qc.id_Chat = :id_Chat
-                      GROUP BY qc.id_Quiniela_Chat
-                      ORDER BY qc.fecha_Agregado DESC";
-            
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':id_Chat', $id_Chat);
-            $stmt->execute();
-            
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (PDOException $e) {
-            error_log("Error al listar quinielas: " . $e->getMessage());
-            return [];
+/**
+ * Listar quinielas de un chat (solo las de ese chat específico)
+ */
+public function listarPorChat($id_Chat) {
+    try {
+        error_log("📊 listarPorChat - Iniciando para id_Chat: " . $id_Chat);
+        
+        // Query SIN GROUP BY para evitar problemas con MySQL
+        $query = "SELECT 
+                    qc.id_Quiniela_Chat,
+                    qc.id_Quiniela,
+                    qc.estado,
+                    qc.agregado_Por,
+                    qc.resultado,
+                    q.nombre,
+                    q.descripcion,
+                    q.tipo,
+                    u.nombre_Usuario AS agregador,
+                    (SELECT COUNT(*) 
+                     FROM " . $this->table_participaciones . " pq 
+                     WHERE pq.id_Quiniela_Chat = qc.id_Quiniela_Chat) as total_participantes,
+                    (SELECT COALESCE(SUM(puntos_Apostados), 0) 
+                     FROM " . $this->table_participaciones . " pq 
+                     WHERE pq.id_Quiniela_Chat = qc.id_Quiniela_Chat) as total_puntos_apostados
+                  FROM " . $this->table_quinielas_chat . " qc
+                  INNER JOIN " . $this->table_quinielas . " q 
+                    ON qc.id_Quiniela = q.id_Quiniela
+                  LEFT JOIN Usuario u 
+                    ON qc.agregado_Por = u.id_Usuario
+                  WHERE qc.id_Chat = :id_Chat
+                  ORDER BY qc.id_Quiniela_Chat DESC";
+        
+        error_log("📊 Preparando query...");
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':id_Chat', $id_Chat, PDO::PARAM_INT);
+        
+        error_log("📊 Ejecutando query...");
+        $stmt->execute();
+        
+        $quinielas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        error_log("📊 ✅ Quinielas encontradas: " . count($quinielas));
+        
+        if (count($quinielas) > 0) {
+            error_log("📊 Primera quiniela: " . json_encode($quinielas[0]));
         }
+        
+        return $quinielas;
+    } catch (PDOException $e) {
+        error_log("❌ ERROR CRÍTICO en listarPorChat");
+        error_log("❌ Mensaje: " . $e->getMessage());
+        error_log("❌ Código: " . $e->getCode());
+        error_log("❌ Archivo: " . $e->getFile());
+        error_log("❌ Línea: " . $e->getLine());
+        return [];
     }
+}
 
     /**
      * Participar en una quiniela
@@ -199,8 +221,8 @@ public function listarDisponibles() {
 
             // Registrar participación
             $query = "INSERT INTO " . $this->table_participaciones . " 
-                      (id_Quiniela_Chat, id_Usuario, puntos_Apostados, prediccion, fecha_Participacion) 
-                      VALUES (:id_Quiniela_Chat, :id_Usuario, :puntos_Apostados, :prediccion, NOW())";
+                      (id_Quiniela_Chat, id_Usuario, puntos_Apostados, prediccion) 
+                      VALUES (:id_Quiniela_Chat, :id_Usuario, :puntos_Apostados, :prediccion)";
             
             $stmt = $this->conn->prepare($query);
             $stmt->bindParam(':id_Quiniela_Chat', $id_Quiniela_Chat);
@@ -213,8 +235,8 @@ public function listarDisponibles() {
 
             // Registrar en historial de puntos
             $historial = "INSERT INTO " . $this->table_historial . " 
-                          (id_Usuario, tipo_Accion, cantidad, razon, id_Referencia, fecha) 
-                          VALUES (:id_Usuario, 'gasto', :cantidad, 'Apuesta en quiniela', :id_Referencia, NOW())";
+                          (id_Usuario, tipo_Accion, cantidad, razon, id_Referencia) 
+                          VALUES (:id_Usuario, 'gasto', :cantidad, 'Apuesta en quiniela', :id_Referencia)";
             $stmt = $this->conn->prepare($historial);
             $stmt->bindParam(':id_Usuario', $id_Usuario);
             $stmt->bindParam(':cantidad', $puntos_Apostados);
@@ -270,7 +292,7 @@ public function listarDisponibles() {
             $getGanadores = "SELECT id_Participacion, id_Usuario, puntos_Apostados 
                              FROM " . $this->table_participaciones . " 
                              WHERE id_Quiniela_Chat = :id_Quiniela_Chat 
-                             AND prediccion = :resultado";
+                             AND LOWER(TRIM(prediccion)) = LOWER(TRIM(:resultado))";
             $stmt = $this->conn->prepare($getGanadores);
             $stmt->bindParam(':id_Quiniela_Chat', $id_Quiniela_Chat);
             $stmt->bindParam(':resultado', $resultado_Real);
@@ -294,8 +316,8 @@ public function listarDisponibles() {
 
                     // Registrar en historial
                     $historial = "INSERT INTO " . $this->table_historial . " 
-                                  (id_Usuario, tipo_Accion, cantidad, razon, id_Referencia, fecha) 
-                                  VALUES (:id_Usuario, 'ganancia', :cantidad, 'Ganancia por quiniela (x1.5)', :id_Referencia, NOW())";
+                                  (id_Usuario, tipo_Accion, cantidad, razon, id_Referencia) 
+                                  VALUES (:id_Usuario, 'ganancia', :cantidad, 'Ganancia por quiniela (x1.5)', :id_Referencia)";
                     $stmt = $this->conn->prepare($historial);
                     $stmt->bindParam(':id_Usuario', $ganador['id_Usuario']);
                     $stmt->bindParam(':cantidad', $premio);

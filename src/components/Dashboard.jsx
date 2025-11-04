@@ -42,6 +42,10 @@ const PrivateChat = ({
   onBack,
   currentUserId,
   userName,
+  userPoints,        
+  setUserPoints,     
+  user,              
+  setUser,           
   isConnected,
   joinChat,
   leaveChat,
@@ -160,23 +164,23 @@ if (messageData.type === 'task_completed' && messageData.chatId === chatData.id_
         return;
       }
 
-      // Detectar cuando una quiniela es finalizada
-      if (messageData.type === 'quiniela_finished' && messageData.chatId === chatData.id_Chat) {
-        console.log('🏁 Quiniela finalizada');
-        
-        const ganadores = messageData.ganadores || [];
-        if (ganadores.length > 0) {
-          const nombresGanadores = ganadores.map(g => g.nombre).join(', ');
-          alert(`🏆 Quiniela finalizada!\nResultado: ${messageData.resultado}\nGanadores: ${nombresGanadores}`);
-        } else {
-          alert(`🏁 Quiniela finalizada!\nResultado: ${messageData.resultado}\nNo hubo ganadores.`);
-        }
-        
-        if (window.loadQuinielasFromSocket) {
-          window.loadQuinielasFromSocket(chatData.id_Chat);
-        }
-        return;
-      }
+// Detectar cuando una quiniela es finalizada
+if (messageData.type === 'quiniela_finished' && messageData.chatId === chatData.id_Chat) {
+  console.log('🏁 Quiniela finalizada por otro usuario');
+  
+  alert(`🏁 Quiniela finalizada!\nResultado: ${messageData.resultado}`);
+
+  if (window.recargarPuntosUsuario) {
+    window.recargarPuntosUsuario();
+  }
+  
+  // Recargar quinielas del chat
+  if (window.loadQuinielasFromSocket) {
+    window.loadQuinielasFromSocket(chatData.id_Chat);
+  }
+  
+  return;
+}
       // Solo agregar si es del chat actual y es mensaje normal
       if (
         messageData.chatId === chatData.id_Chat &&
@@ -1289,6 +1293,11 @@ const Dashboard = ({ onLogout }) => {
   const [userName, setUserName] = useState("Usuario");
   const [userPoints, setUserPoints] = useState(0);
   const [allUsers, setAllUsers] = useState([]); // <--- NUEVO: Estado para todos los usuarios de la DB
+  const [user, setUser] = useState({
+  id_Usuario: null,
+  nombre_Usuario: '',
+  Puntos: 0
+});
 
   
 
@@ -1398,9 +1407,8 @@ const [newTaskData, setNewTaskData] = useState({
   puntos_Recompensa: 10
 });
 
-// ============================================
+
   // ESTADOS PARA QUINIELAS
-  // ============================================
   const [quinielas, setQuinielas] = useState([]);
   const [loadingQuinielas, setLoadingQuinielas] = useState(false);
   const [quinielasDisponibles, setQuinielasDisponibles] = useState([]);
@@ -1440,6 +1448,7 @@ const [newTaskData, setNewTaskData] = useState({
         if (usuarioStr) {
           const usuario = JSON.parse(usuarioStr);
           console.log("✅ Usuario cargado:", usuario);
+          setUser(usuario);
           setCurrentUserId(usuario.id_Usuario);
           setUserName(usuario.nombre_Usuario || "Usuario");
           setUserPoints(parseInt(usuario.Puntos) || 0);
@@ -1454,6 +1463,66 @@ const [newTaskData, setNewTaskData] = useState({
     };
     loadCurrentUser();
   }, []);
+
+  // FUNCIÓN: Recargar solo los puntos del usuario actual
+const recargarPuntosUsuario = async () => {
+  try {
+    console.log('🔄 Recargando puntos del usuario...');
+    
+    const token = localStorage.getItem("token");
+    const usuarioStr = localStorage.getItem("usuario");
+    
+    if (!token || !usuarioStr) {
+      console.warn('⚠️ No hay token o usuario');
+      return;
+    }
+    
+    const usuario = JSON.parse(usuarioStr);
+    
+    // ✅ CORRECCIÓN: Usar el endpoint correcto
+    const API_BASE_URL = 'https://uneroded-forest-untasked.ngrok-free.dev/POI/vivemundialproject/vivemundialproject/backend/api';
+    
+    const response = await fetch(`${API_BASE_URL}/perfil`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'ngrok-skip-browser-warning': 'true'
+      }
+    });
+    
+    // Verificar que la respuesta sea JSON
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const text = await response.text();
+      console.error('❌ Respuesta no es JSON:', text.substring(0, 200));
+      throw new Error('Respuesta del servidor no es JSON');
+    }
+    
+    const data = await response.json();
+    console.log('📡 Respuesta de perfil:', data);
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Error al obtener perfil');
+    }
+    
+    if (data.success) {
+      const puntosActualizados = parseInt(data.data.Puntos) || 0;
+      console.log('✅ Puntos actualizados:', puntosActualizados);
+      
+      // Actualizar estados
+      setUserPoints(puntosActualizados);
+      setUser(prev => ({ ...prev, Puntos: puntosActualizados }));
+      
+      // Actualizar localStorage
+      const usuarioActualizado = { ...usuario, Puntos: puntosActualizados };
+      localStorage.setItem('usuario', JSON.stringify(usuarioActualizado));
+    }
+  } catch (error) {
+    console.error('❌ Error al recargar puntos:', error);
+    // Silenciar el error para no molestar al usuario
+  }
+};
 
   // Cargar chats
   useEffect(() => {
@@ -1472,6 +1541,17 @@ const [newTaskData, setNewTaskData] = useState({
       setTasks([]);
     }
   }, [selectedChat?.id_Chat, selectedChat?.tipo_Chat]);
+//Carga las quinielas del chat seleccionado
+  useEffect(() => {
+  if (selectedChat?.id_Chat) {
+    console.log('📊 Chat seleccionado cambió, cargando quinielas...');
+    loadQuinielas(selectedChat.id_Chat);
+  } else {
+    // Si no hay chat seleccionado, limpiar quinielas
+    setQuinielas([]);
+  }
+}, [selectedChat?.id_Chat]);
+
   // Nueva función para cargar todos los usuarios
   const loadAllUsers = async () => {
     try {
@@ -1683,14 +1763,16 @@ const [newTaskData, setNewTaskData] = useState({
       setLoadingQuinielas(false);
     }
   };
-    // Exponer función globalmente para que PrivateChat pueda usarla
-  useEffect(() => {
-    window.loadQuinielasFromSocket = loadQuinielas;
-    
-    return () => {
-      delete window.loadQuinielasFromSocket;
-    };
-  }, []);
+// Exponer funciones globalmente
+useEffect(() => {
+  window.loadQuinielasFromSocket = loadQuinielas;
+  window.recargarPuntosUsuario = recargarPuntosUsuario;
+  
+  return () => {
+    delete window.loadQuinielasFromSocket;
+    delete window.recargarPuntosUsuario;
+  };
+}, [loadQuinielas, recargarPuntosUsuario]);
  // FUNCIÓN: CARGAR QUINIELAS DISPONIBLES
   const loadQuinielasDisponibles = async () => {
     try {
@@ -1708,158 +1790,152 @@ const [newTaskData, setNewTaskData] = useState({
     }
   };
    // FUNCIÓN: AGREGAR QUINIELA AL CHAT
-  const handleAgregarQuiniela = async (id_Quiniela) => {
-    if (!selectedChat) return;
+const handleAgregarQuiniela = async (id_Quiniela) => {
+  if (!selectedChat) return;
 
-    try {
-      console.log('➕ Agregando quiniela al chat:', { id_Quiniela, id_Chat: selectedChat.id });
+  try {
+    console.log('➕ Agregando quiniela al chat:', { 
+      id_Quiniela, 
+      id_Chat: selectedChat.id_Chat
+    });
 
-      const response = await quinielaService.agregarAChat(id_Quiniela, selectedChat.id);
+    const response = await quinielaService.agregarAChat(
+      id_Quiniela, 
+      selectedChat.id_Chat
+    );
+    
+    if (response.success) {
+      alert('✅ Quiniela agregada exitosamente al chat');
       
-      if (response.success) {
-        alert('✅ Quiniela agregada exitosamente al chat');
-        
-        // Recargar quinielas del chat
-        await loadQuinielas(selectedChat.id);
-        
-        // Cerrar modal
-        setShowNewQuinielaModal(false);
+      // Recargar quinielas del chat
+      await loadQuinielas(selectedChat.id_Chat);
+      
+      // Cerrar modal
+      setShowNewQuinielaModal(false);
 
-        // Emitir evento WebSocket
-        if (socket) {
-          socket.emit('quiniela:added', {
-            id_Chat: selectedChat.id,
-            quiniela: response.data.quiniela
-          });
-        }
+      // ✅ CORREGIDO: Emitir evento WebSocket
+      if (isConnected) {
+        sendSocketMessage({
+          type: 'quiniela_added',
+          chatId: selectedChat.id_Chat,
+          quiniela: response.data.quiniela
+        });
       }
-    } catch (error) {
-      console.error('❌ Error al agregar quiniela:', error);
-      alert('Error al agregar quiniela: ' + error.message);
     }
-  };
+  } catch (error) {
+    console.error('❌ Error al agregar quiniela:', error);
+    alert('Error al agregar quiniela: ' + error.message);
+  }
+};
     // FUNCIÓN: PARTICIPAR EN QUINIELA
-  const handleParticiparQuiniela = async () => {
-    if (!quinielaSeleccionada) return;
+const handleParticiparQuiniela = async () => {
+  if (!quinielaSeleccionada) return;
 
-    // Validaciones
-    if (!participacionData.puntos || participacionData.puntos <= 0) {
-      alert('⚠️ Debes ingresar una cantidad de puntos válida');
-      return;
-    }
+  // Validaciones
+  if (!participacionData.puntos || participacionData.puntos <= 0) {
+    alert('⚠️ Debes ingresar una cantidad de puntos válida');
+    return;
+  }
 
-    if (!participacionData.prediccion || participacionData.prediccion.trim() === '') {
-      alert('⚠️ Debes ingresar tu predicción');
-      return;
-    }
+  if (!participacionData.prediccion || participacionData.prediccion.trim() === '') {
+    alert('⚠️ Debes ingresar tu predicción');
+    return;
+  }
 
-    try {
-      console.log('🎲 Participando en quiniela:', {
-        id_Quiniela_Chat: quinielaSeleccionada.id,
-        puntos: participacionData.puntos,
-        prediccion: participacionData.prediccion
-      });
+  try {
+    console.log('🎲 Participando en quiniela:', {
+      id_Quiniela_Chat: quinielaSeleccionada.id,
+      puntos: participacionData.puntos,
+      prediccion: participacionData.prediccion
+    });
 
-      const response = await quinielaService.participar(
-        quinielaSeleccionada.id,
-        parseInt(participacionData.puntos),
-        participacionData.prediccion
-      );
+    const response = await quinielaService.participar(
+      quinielaSeleccionada.id,
+      parseInt(participacionData.puntos),
+      participacionData.prediccion
+    );
+    
+    if (response.success) {
+      alert(`✅ Participación registrada!\nApostaste ${participacionData.puntos} puntos`);
       
-      if (response.success) {
-        alert(`✅ Participación registrada! Apostaste ${participacionData.puntos} puntos`);
-        
-        // Actualizar puntos del usuario
-        const nuevosPuntos = user.Puntos - parseInt(participacionData.puntos);
-        setUser({ ...user, Puntos: nuevosPuntos });
-        
-        // Recargar quinielas del chat
-        await loadQuinielas(selectedChat.id);
-        
-        // Cerrar modal y limpiar datos
-        setShowParticipateModal(false);
-        setQuinielaSeleccionada(null);
-        setParticipacionData({ puntos: '', prediccion: '' });
+// Actualizar puntos del usuario
+const nuevosPuntos = user.Puntos - parseInt(participacionData.puntos);
 
-        // Emitir evento WebSocket
-        if (socket) {
-          socket.emit('quiniela:participated', {
-            id_Chat: selectedChat.id,
-            id_Quiniela_Chat: quinielaSeleccionada.id,
-            usuario: user.nombre_Usuario
-          });
-        }
+await recargarPuntosUsuario();
+
+      // Recargar quinielas del chat
+      await loadQuinielas(selectedChat.id_Chat);
+      
+      // Cerrar modal y limpiar datos
+      setShowParticipateModal(false);
+      setQuinielaSeleccionada(null);
+      setParticipacionData({ puntos: '', prediccion: '' });
+
+      // ✅ CORREGIDO: Emitir evento WebSocket
+      if (isConnected) {
+        sendSocketMessage({
+          type: 'quiniela_participated',
+          chatId: selectedChat.id_Chat,
+          id_Quiniela_Chat: quinielaSeleccionada.id,
+          usuario: user.nombre_Usuario
+        });
       }
-    } catch (error) {
-      console.error('❌ Error al participar en quiniela:', error);
-      alert('Error al participar: ' + error.message);
     }
-  };
+  } catch (error) {
+    console.error('❌ Error al participar en quiniela:', error);
+    alert('Error al participar: ' + error.message);
+  }
+};
+
 
   // FUNCIÓN: FINALIZAR QUINIELA
-  const handleFinalizarQuiniela = async () => {
-    if (!quinielaSeleccionada) return;
+const handleFinalizarQuiniela = async () => {
+  if (!quinielaSeleccionada) return;
 
-    // Validación
-    if (!finalizarData.resultado || finalizarData.resultado.trim() === '') {
-      alert('⚠️ Debes ingresar el resultado de la quiniela');
-      return;
-    }
+  if (!finalizarData.resultado || finalizarData.resultado.trim() === '') {
+    alert('⚠️ Debes ingresar el resultado de la quiniela');
+    return;
+  }
 
-    try {
-      console.log('🏁 Finalizando quiniela:', {
-        id_Quiniela_Chat: quinielaSeleccionada.id,
-        resultado: finalizarData.resultado
-      });
+  try {
+    console.log('🏁 Finalizando quiniela:', {
+      id_Quiniela_Chat: quinielaSeleccionada.id,
+      resultado: finalizarData.resultado
+    });
 
-      const response = await quinielaService.finalizar(
-        quinielaSeleccionada.id,
-        finalizarData.resultado
-      );
+    const response = await quinielaService.finalizar(
+      quinielaSeleccionada.id,
+      finalizarData.resultado
+    );
+    
+    if (response.success) {
+      alert('✅ Quiniela finalizada exitosamente');
       
-      if (response.success) {
-        const ganadores = response.data.ganadores || [];
-        const totalGanadores = response.data.total_ganadores || 0;
+      await recargarPuntosUsuario();
+      
+      // Recargar quinielas del chat
+      await loadQuinielas(selectedChat.id_Chat);
+      
+      // Cerrar modal y limpiar datos
+      setShowFinalizarModal(false);
+      setQuinielaSeleccionada(null);
+      setFinalizarData({ resultado: '' });
 
-        let mensaje = `✅ Quiniela finalizada!\n\n`;
-        mensaje += `Resultado: ${response.data.resultado}\n`;
-        mensaje += `Total de ganadores: ${totalGanadores}\n\n`;
-        
-        if (ganadores.length > 0) {
-          mensaje += `🏆 Ganadores:\n`;
-          ganadores.forEach(g => {
-            mensaje += `- ${g.nombre}: Apostó ${g.apostado} pts, ganó ${g.premio} pts\n`;
-          });
-        } else {
-          mensaje += `No hubo ganadores en esta quiniela.`;
-        }
-
-        alert(mensaje);
-        
-        // Recargar quinielas del chat
-        await loadQuinielas(selectedChat.id);
-        
-        // Cerrar modal y limpiar datos
-        setShowFinalizarModal(false);
-        setQuinielaSeleccionada(null);
-        setFinalizarData({ resultado: '' });
-
-        // Emitir evento WebSocket
-        if (socket) {
-          socket.emit('quiniela:finished', {
-            id_Chat: selectedChat.id,
-            id_Quiniela_Chat: quinielaSeleccionada.id,
-            resultado: response.data.resultado,
-            ganadores: ganadores
-          });
-        }
+      // Emitir evento WebSocket
+      if (isConnected) {
+        sendSocketMessage({
+          type: 'quiniela_finished',
+          chatId: selectedChat.id_Chat,
+          id_Quiniela_Chat: quinielaSeleccionada.id,
+          resultado: response.data.resultado
+        });
       }
-    } catch (error) {
-      console.error('❌ Error al finalizar quiniela:', error);
-      alert('Error al finalizar quiniela: ' + error.message);
     }
-  };
-
+  } catch (error) {
+    console.error('❌ Error al finalizar quiniela:', error);
+    alert('Error al finalizar quiniela: ' + error.message);
+  }
+};
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -2218,6 +2294,10 @@ const [newTaskData, setNewTaskData] = useState({
             onBack={handleBackToDashboard}
             currentUserId={currentUserId}
             userName={userName}
+            userPoints={userPoints}        
+  setUserPoints={setUserPoints}  
+  user={user}                    
+  setUser={setUser}              
             // Props de Socket.IO
             isConnected={isConnected}
             joinChat={joinChat}
@@ -2250,12 +2330,15 @@ const [newTaskData, setNewTaskData] = useState({
               <>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-bold text-gray-800">Quinielas</h3>
-                  <button
-                    onClick={() => setShowNewQuinielaModal(true)}
-                    className="text-sm text-blue-600 hover:underline"
-                  >
-                    + Nueva
-                  </button>
+<button
+  onClick={() => {
+    loadQuinielasDisponibles();
+    setShowNewQuinielaModal(true);
+  }}
+  className="text-sm text-blue-600 hover:underline"
+>
+  + Nueva
+</button>
                 </div>
 
                 {/* SECCIÓN DE QUINIELAS - INTEGRADA CON BACKEND */}
@@ -2280,7 +2363,7 @@ const [newTaskData, setNewTaskData] = useState({
                   </div>
                 ) : (
                   <div className="space-y-4 mb-6">
-                    {quinielas.map((q) => (
+                    {quinielas.map((q) => (                  
                       <div
                         key={q.id}
                         className={`bg-white rounded-xl p-4 border-2 transition-shadow ${
@@ -2318,31 +2401,33 @@ const [newTaskData, setNewTaskData] = useState({
                           </div>
                         </div>
                         
-                        {/* Botones de acción */}
-                        {q.status === 'activa' && (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => {
-                                setQuinielaSeleccionada(q);
-                                setShowParticipateModal(true);
-                              }}
-                              className="flex-1 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                            >
-                              Participar
-                            </button>
-                            {q.agregadoPor === user.id_Usuario && (
-                              <button
-                                onClick={() => {
-                                  setQuinielaSeleccionada(q);
-                                  setShowFinalizarModal(true);
-                                }}
-                                className="flex-1 py-2 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                              >
-                                Finalizar
-                              </button>
-                            )}
-                          </div>
-                        )}
+{/* Botones de acción */}
+{q.status === 'activa' && (
+  <div className="flex gap-2">
+    <button
+      onClick={() => {
+        setQuinielaSeleccionada(q);
+        setShowParticipateModal(true);
+      }}
+      className="flex-1 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+    >
+      Participar
+    </button>
+    {/* ✅ CORREGIDO: Comparación con conversión de tipos */}
+    {currentUserId && q.agregadoPor && 
+     parseInt(q.agregadoPor) === parseInt(currentUserId) && (
+      <button
+        onClick={() => {
+          setQuinielaSeleccionada(q);
+          setShowFinalizarModal(true);
+        }}
+        className="flex-1 py-2 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+      >
+        Finalizar
+      </button>
+    )}
+  </div>
+)}
                         {q.status === 'finalizada' && (
                           <div className="py-2 text-center text-sm bg-gray-200 text-gray-600 rounded-lg">
                             Quiniela Finalizada
