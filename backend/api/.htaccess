@@ -45,3 +45,10 @@ RewriteRule ^quinielas/finalizar$ quinielas.php?ruta=finalizar [L,QSA]
 RewriteRule ^quinielas/detalles$ quinielas.php?ruta=detalles [L,QSA]
 RewriteRule ^quinielas/participaciones$ quinielas.php?ruta=participaciones [L,QSA]
 RewriteRule ^quinielas/mi-participacion$ quinielas.php?ruta=mi-participacion [L,QSA]
+
+# API DE TIENDA
+RewriteRule ^tienda/?$ tienda.php [L,QSA]
+RewriteRule ^tienda/mis-iconos/?$ tienda.php [L,QSA]
+RewriteRule ^tienda/comprar/?$ tienda.php [L,QSA]
+RewriteRule ^tienda/equipar/?$ tienda.php [L,QSA]
+RewriteRule ^tienda/desequipar/?$ tienda.php [L,QSA]

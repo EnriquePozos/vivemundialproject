@@ -1,41 +1,46 @@
 <?php
 /**
- * Configuración de conexión a la base de datos MySQL
- * Base de datos: POI - Copa Mundial FIFA 2026
+ * Clase Database
+ * Maneja la conexión a la base de datos MySQL
+ * Configurado con soporte completo UTF-8 para emojis
  */
 
 class Database {
+    // Configuración de la base de datos
     private $host = "localhost";
     private $db_name = "POI";
     private $username = "root";
     private $password = "";
-    private $conn;
+    public $conn;
 
     /**
      * Obtener conexión a la base de datos
-     * @return PDO|null Objeto de conexión PDO
+     * @return PDO|null
      */
     public function getConnection() {
         $this->conn = null;
 
         try {
+            // Crear conexión PDO con charset UTF-8MB4
             $this->conn = new PDO(
-                "mysql:host=" . $this->host . ";dbname=" . $this->db_name,
+                "mysql:host=" . $this->host . 
+                ";dbname=" . $this->db_name . 
+                ";charset=utf8mb4",  // Soporte completo para emojis
                 $this->username,
-                $this->password
+                $this->password,
+                array(
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_EMULATE_PREPARES => false
+                )
             );
             
-            // Configurar el charset UTF-8
-            $this->conn->exec("set names utf8");
+            // Forzar UTF-8MB4 en la conexión (redundancia para compatibilidad)
+            $this->conn->exec("SET NAMES utf8mb4");
+            $this->conn->exec("SET CHARACTER SET utf8mb4");
             
-            // Configurar PDO para que lance excepciones en errores
-            $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            
-            // Configurar PDO para que devuelva arrays asociativos
-            $this->conn->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-            
-        } catch(PDOException $e) {
-            echo "Error de conexión: " . $e->getMessage();
+        } catch(PDOException $exception) {
+            echo "Error de conexión: " . $exception->getMessage();
         }
 
         return $this->conn;

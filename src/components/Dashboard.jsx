@@ -35,6 +35,7 @@ import { useSocket } from "../hooks/useSocket";
 import VideoCall from "./VideoCall"; // Componente de videollamadas
 import tareaService from "../services/tareaService";
 import quinielaService from "../services/quinielaService";
+import tiendaService from "../services/tiendaService";
 
 // Componente de Chat Privado integrado
 const PrivateChat = ({
@@ -1298,6 +1299,10 @@ const Dashboard = ({ onLogout }) => {
   nombre_Usuario: '',
   Puntos: 0
 });
+const [shopIcons, setShopIcons] = useState([]);           
+const [userIcons, setUserIcons] = useState([]);           
+const [equippedIcon, setEquippedIcon] = useState(null);   
+const [loadingShop, setLoadingShop] = useState(false);    
 
   
 
@@ -1534,6 +1539,10 @@ const recargarPuntosUsuario = async () => {
     loadAllUsers();
   }, []);
   useEffect(() => {
+  loadShopIcons();
+  loadUserIcons();
+}, []);
+  useEffect(() => {
     if (selectedChat?.id_Chat && selectedChat?.tipo_Chat === 'grupal') {
       console.log('📋 Chat grupal seleccionado, cargando tareas...');
       loadTasks(selectedChat.id_Chat);
@@ -1590,6 +1599,193 @@ const recargarPuntosUsuario = async () => {
       }
     }
   };
+
+// FUNCIONES DE TIENDA
+// Cargar iconos disponibles de la tienda
+const loadShopIcons = async () => {
+  try {
+    setLoadingShop(true);
+    console.log('🛒 Cargando iconos de la tienda...');
+    
+    const response = await tiendaService.obtenerIconosDisponibles();
+    
+    if (response.success) {
+      console.log('✅ Iconos de tienda cargados:', response.data);
+      setShopIcons(response.data);
+    } else {
+      console.error('❌ Error al cargar iconos:', response.message);
+      showAlertMessage('Error al cargar la tienda');
+    }
+  } catch (error) {
+    console.error('❌ Error en loadShopIcons:', error);
+    showAlertMessage('Error al cargar la tienda');
+  } finally {
+    setLoadingShop(false);
+  }
+};
+
+ // Cargar iconos comprados por el usuario 
+const loadUserIcons = async () => {
+  try {
+    console.log('👤 Cargando iconos del usuario...');
+    
+    const response = await tiendaService.obtenerMisIconos();
+    
+    if (response.success) {
+      console.log('✅ Iconos del usuario cargados:', response.data);
+      setUserIcons(response.data.iconos || []);
+      setEquippedIcon(response.data.icono_equipado);
+      
+      // Si hay un icono equipado, actualizar el usuario en el estado
+      if (response.data.icono_equipado) {
+        setUser(prev => ({
+          ...prev,
+          IconoPerfil: response.data.icono_equipado.emoji
+        }));
+      }
+    } else {
+      console.error('❌ Error al cargar iconos del usuario:', response.message);
+    }
+  } catch (error) {
+    console.error('❌ Error en loadUserIcons:', error);
+  }
+};
+
+ // Verificar si el usuario ya tiene un icono
+const userHasIcon = (id_Icono) => {
+  return userIcons.some(icon => icon.id_Icono === id_Icono);
+};
+
+// Verificar si un icono está equipado
+const isIconEquipped = (id_Icono) => {
+  return equippedIcon && equippedIcon.id_Icono === id_Icono;
+};
+
+// Manejar la compra de un icono
+const handleBuyIcon = async (icon) => {
+  try {
+    console.log('🛍️ Comprando icono:', icon);
+    
+    // Validar puntos suficientes
+    if (userPoints < icon.precio_Puntos) {
+      showAlertMessage(
+        `No tienes suficientes puntos. Necesitas ${icon.precio_Puntos} puntos.`
+      );
+      return;
+    }
+    
+    // Realizar la compra
+    const response = await tiendaService.comprarIcono(icon.id_Icono);
+    
+    if (response.success) {
+      showAlertMessage(`¡Compraste ${icon.nombre}! 🎉`);
+      
+      // Actualizar puntos del usuario
+      setUserPoints(response.data.puntos_restantes);
+      setUser(prev => ({
+        ...prev,
+        Puntos: response.data.puntos_restantes
+      }));
+      
+      // Actualizar usuario en localStorage
+      const usuarioActualizado = {
+        ...user,
+        Puntos: response.data.puntos_restantes
+      };
+      localStorage.setItem('usuario', JSON.stringify(usuarioActualizado));
+      
+      // Recargar iconos del usuario
+      await loadUserIcons();
+      
+    } else {
+      showAlertMessage(response.message || 'Error al comprar el icono');
+    }
+    
+  } catch (error) {
+    console.error('❌ Error al comprar icono:', error);
+    showAlertMessage('Error al procesar la compra');
+  }
+};
+
+//Manejar equipar un icono
+const handleEquipIcon = async (icon) => {
+  try {
+    console.log('⚡ Equipando icono:', icon);
+    
+    const response = await tiendaService.equiparIcono(icon.id_Icono);
+    
+    if (response.success) {
+      showAlertMessage(`¡${icon.nombre} equipado! ✨`);
+      
+      // Actualizar icono equipado
+      setEquippedIcon({
+        id_Icono: icon.id_Icono,
+        emoji: response.data.emoji_equipado,
+        nombre: icon.nombre
+      });
+      
+      // Actualizar usuario con el nuevo icono
+      setUser(prev => ({
+        ...prev,
+        IconoPerfil: response.data.emoji_equipado
+      }));
+      
+      // Actualizar localStorage
+      const usuarioActualizado = {
+        ...user,
+        IconoPerfil: response.data.emoji_equipado
+      };
+      localStorage.setItem('usuario', JSON.stringify(usuarioActualizado));
+      
+      // Recargar iconos para actualizar el estado equipado
+      await loadUserIcons();
+      
+    } else {
+      showAlertMessage(response.message || 'Error al equipar el icono');
+    }
+    
+  } catch (error) {
+    console.error('❌ Error al equipar icono:', error);
+    showAlertMessage('Error al equipar el icono');
+  }
+};
+
+ //Manejar desequipar el icono actual
+const handleUnequipIcon = async () => {
+  try {
+    console.log('🔄 Desequipando icono...');
+    
+    const response = await tiendaService.desequiparIcono();
+    
+    if (response.success) {
+      showAlertMessage('Icono desequipado');
+      
+      // Resetear icono equipado
+      setEquippedIcon(null);
+      setUser(prev => ({
+        ...prev,
+        IconoPerfil: 'default_avatar.png'
+      }));
+      
+      // Actualizar localStorage
+      const usuarioActualizado = {
+        ...user,
+        IconoPerfil: 'default_avatar.png'
+      };
+      localStorage.setItem('usuario', JSON.stringify(usuarioActualizado));
+      
+      // Recargar iconos
+      await loadUserIcons();
+      
+    } else {
+      showAlertMessage(response.message || 'Error al desequipar');
+    }
+    
+  } catch (error) {
+    console.error('❌ Error al desequipar icono:', error);
+    showAlertMessage('Error al desequipar icono');
+  }
+};
 
   const loadChats = async () => {
     try {
@@ -1948,14 +2144,6 @@ const handleFinalizarQuiniela = async () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Mock de iconos de la tienda
-  const shopIcons = [
-    { id: 1, name: "Balón de Oro", icon: "⚽", price: 500, rarity: "common" },
-    { id: 2, name: "Copa Mundial", icon: "🏆", price: 1000, rarity: "rare" },
-    { id: 3, name: "Estrella", icon: "⭐", price: 750, rarity: "common" },
-    { id: 4, name: "Fuego", icon: "🔥", price: 1200, rarity: "epic" },
-    { id: 5, name: "Corona", icon: "👑", price: 2000, rarity: "legendary" },
-  ];
 
   const showAlertMessage = (message) => {
     setAlertMessage(message);
@@ -2030,17 +2218,6 @@ const handleFinalizarQuiniela = async () => {
     setSelectedChat(null);
   };
 
-  const handleBuyIcon = (icon) => {
-    if (userPoints < icon.price) {
-      showAlertMessage(
-        `No tienes suficientes puntos. Necesitas ${icon.price} puntos.`
-      );
-      return;
-    }
-
-    showAlertMessage(`¡Compraste ${icon.name} por ${icon.price} puntos!`);
-    setShowShopDropdown(false);
-  };
 
   const Alert = () => (
     <div
@@ -2130,46 +2307,92 @@ const handleFinalizarQuiniela = async () => {
                       </div>
                     </div>
 
-                    <div className="max-h-96 overflow-y-auto p-4">
-                      {shopIcons.map((icon) => (
-                        <div
-                          key={icon.id}
-                          className="mb-3 p-3 bg-gradient-to-r from-gray-50 to-white border border-gray-200 rounded-xl hover:shadow-md transition-all"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-purple-100 rounded-xl flex items-center justify-center text-2xl">
-                                {icon.icon}
-                              </div>
-                              <div>
-                                <div className="font-semibold text-gray-800">
-                                  {icon.name}
-                                </div>
-                                <div className="flex items-center space-x-1 text-yellow-600">
-                                  <Coins className="w-3 h-3" />
-                                  <span className="text-sm font-medium">
-                                    {icon.price} puntos
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleBuyIcon(icon)}
-                              disabled={userPoints < icon.price}
-                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                userPoints >= icon.price
-                                  ? "bg-blue-500 text-white hover:bg-blue-600"
-                                  : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                              }`}
-                            >
-                              {userPoints >= icon.price
-                                ? "Comprar"
-                                : "Sin puntos"}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+<div className="max-h-96 overflow-y-auto p-4">
+  {loadingShop ? (
+    <div className="flex items-center justify-center py-8">
+      <div className="text-gray-500">Cargando tienda...</div>
+    </div>
+  ) : shopIcons.length === 0 ? (
+    <div className="flex items-center justify-center py-8">
+      <div className="text-gray-500">No hay iconos disponibles</div>
+    </div>
+  ) : (
+    shopIcons.map((icon) => {
+      const hasIcon = userHasIcon(icon.id_Icono);
+      const isEquipped = isIconEquipped(icon.id_Icono);
+      
+      return (
+        <div
+          key={icon.id_Icono}
+          className="mb-3 p-3 bg-gradient-to-r from-gray-50 to-white border border-gray-200 rounded-xl hover:shadow-md transition-all"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-purple-100 rounded-xl flex items-center justify-center text-2xl">
+                {icon.emoji}
+              </div>
+              <div>
+                <div className="font-semibold text-gray-800">
+                  {icon.nombre}
+                </div>
+                <div className="flex items-center space-x-1 text-yellow-600">
+                  <Coins className="w-3 h-3" />
+                  <span className="text-sm font-medium">
+                    {icon.precio_Puntos} puntos
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            {/* BOTONES DINÁMICOS */}
+            <div className="flex flex-col gap-1">
+              {!hasIcon ? (
+                // NO TIENE EL ICONO - Mostrar botón Comprar
+                <button
+                  onClick={() => handleBuyIcon(icon)}
+                  disabled={userPoints < icon.precio_Puntos}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    userPoints >= icon.precio_Puntos
+                      ? "bg-blue-500 text-white hover:bg-blue-600"
+                      : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                  }`}
+                >
+                  {userPoints >= icon.precio_Puntos
+                    ? "Comprar"
+                    : "Sin puntos"}
+                </button>
+              ) : isEquipped ? (
+                // TIENE EL ICONO Y ESTÁ EQUIPADO
+                <div className="flex flex-col gap-1">
+                  <button
+                    disabled
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-green-500 text-white cursor-default"
+                  >
+                    ✓ Equipado
+                  </button>
+                  <button
+                    onClick={handleUnequipIcon}
+                    className="px-3 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                  >
+                    Desequipar
+                  </button>
+                </div>
+              ) : (
+                // TIENE EL ICONO PERO NO ESTÁ EQUIPADO
+                <button
+                  onClick={() => handleEquipIcon(icon)}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-purple-500 text-white hover:bg-purple-600 transition-colors"
+                >
+                  Equipar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    })
+  )}
+</div>
 
                     <div className="p-4 bg-gray-50 text-center">
                       <p className="text-xs text-gray-600">
