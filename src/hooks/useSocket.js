@@ -109,6 +109,11 @@ export const useSocket = (userId, userName) => {
       });
     });
 
+    //Debug
+      socket.onAny((eventName, ...args) => {
+    console.log(`🔔 [DEBUG] Evento recibido:`, eventName, args);
+  });
+  
     // ===============================
     // CLEANUP AL DESMONTAR
     // ===============================
@@ -204,6 +209,18 @@ export const useSocket = (userId, userName) => {
     }
   };
 
+const sendSocketMessage = (messageData) => {
+  if (socketRef.current && isConnected) {
+    // Determinar el tipo de evento a emitir según el tipo de mensaje
+    const eventType = messageData.type;
+    
+    console.log(`📤 Emitiendo evento: ${eventType}`, messageData);
+    socketRef.current.emit(eventType, messageData);
+  } else {
+    console.warn('⚠️ No se puede enviar evento, socket no conectado');
+  }
+};
+
   return {
     socket: socketRef.current,
     isConnected,
@@ -212,6 +229,7 @@ export const useSocket = (userId, userName) => {
     joinChat,
     leaveChat,
     sendMessage,
+    sendSocketMessage,
     onMessageReceived,
     offMessageReceived,
     notifyTyping,

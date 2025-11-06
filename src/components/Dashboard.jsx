@@ -36,6 +36,7 @@ import VideoCall from "./VideoCall"; // Componente de videollamadas
 import tareaService from "../services/tareaService";
 import quinielaService from "../services/quinielaService";
 import tiendaService from "../services/tiendaService";
+import Avatar from "./Avatar";
 
 // Componente de Chat Privado integrado
 const PrivateChat = ({
@@ -1189,7 +1190,7 @@ const NewChatModal = ({
             <div className="space-y-4">
               {newChatType === "grupal" && (
                 <div>
-                  {/* 🔧 FIX: Cambiar text-gray-700 a text-gray-900 */}
+                  
                   <label className="block text-sm font-medium text-gray-900 mb-2">
                     Nombre del grupo
                   </label>
@@ -1205,7 +1206,7 @@ const NewChatModal = ({
               )}
 
               <div>
-                {/* 🔧 FIX: Cambiar text-gray-700 a text-gray-900 */}
+                
                 <label className="block text-sm font-medium text-gray-900 mb-2">
                   Selecciona usuarios
                 </label>
@@ -1216,41 +1217,36 @@ const NewChatModal = ({
                     </div>
                   ) : (
                     allUsers.map((user) => (
-                      <button
-                        key={user.id_Usuario}
-                        onClick={() => toggleUserSelection(user.id_Usuario)}
-                        className={`w-full p-3 rounded-lg text-left transition-colors flex items-center justify-between ${
-                          selectedUsers.includes(user.id_Usuario)
-                            ? "bg-blue-50 border-2 border-blue-500"
-                            : "bg-white border-2 border-transparent hover:bg-gray-100"
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
-                            <span className="text-white text-sm">
-                              {user.nombre_Usuario?.charAt(0).toUpperCase() ||
-                                "U"}
-                            </span>
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-900">
-                              {user.nombre_Usuario}
-                            </div>
-                            <div
-                              className={`text-xs ${
-                                user.Estado == 1
-                                  ? "text-green-600"
-                                  : "text-gray-500"
-                              }`}
-                            >
-                              {user.Estado == 1 ? "En línea" : "Desconectado"}
-                            </div>
-                          </div>
-                        </div>
-                        {selectedUsers.includes(user.id_Usuario) && (
-                          <CheckCircle className="w-5 h-5 text-blue-600" />
-                        )}
-                      </button>
+// NUEVO:
+<button
+  key={user.id_Usuario}
+  onClick={() => toggleUserSelection(user.id_Usuario)}
+  className="w-full flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors"
+>
+  <div className="flex items-center space-x-3">
+    <Avatar 
+      iconoPerfil={user.IconoPerfil} 
+      size="md"
+    />
+    <div className="text-left">
+      <div className="font-semibold text-gray-800">
+        {user.nombre_Usuario}
+      </div>
+      <div
+        className={`text-xs ${
+          user.Estado == 1
+            ? "text-green-600"
+            : "text-gray-500"
+        }`}
+      >
+        {user.Estado == 1 ? "En línea" : "Desconectado"}
+      </div>
+    </div>
+  </div>
+  {selectedUsers.includes(user.id_Usuario) && (
+    <CheckCircle className="w-5 h-5 text-blue-600" />
+  )}
+</button>
                     ))
                   )}
                 </div>
@@ -1320,6 +1316,185 @@ const [loadingShop, setLoadingShop] = useState(false);
     onGlobalEvent,
     offGlobalEvent,
   } = useSocket(currentUserId, userName);
+
+// Escuchar cambios de iconos y estados de usuarios
+useEffect(() => {
+  // ✅ Verificar que el socket esté realmente conectado
+  if (!isConnected) {
+    console.log('⚠️ [Dashboard] Socket no conectado aún, esperando...');
+    return;
+  }
+
+  console.log('✅ [Dashboard] Socket conectado, registrando listeners...');
+
+  // Función auxiliar para verificar si el evento se recibe
+  const testEventReceived = (eventName) => {
+    console.log(`🎯 [Dashboard] Evento ${eventName} RECIBIDO en el socket`);
+  };
+
+  // ============================================
+  // HANDLERS
+  // ============================================
+  
+  const handleIconEquipped = (data) => {
+    testEventReceived('icon_equipped');
+    console.log('🎨 [HANDLER] handleIconEquipped ejecutado:', data);
+    console.log('📊 [HANDLER] Data recibida completa:', JSON.stringify(data, null, 2));
+    
+    // Actualizar chats
+    setChats(prevChats => {
+      console.log('🔄 [HANDLER] Chats antes de actualizar:', prevChats.length);
+      const updated = prevChats.map(chat => {
+        console.log(`🔍 [HANDLER] Verificando chat: ${chat.nombre_Chat_display}, tipo: ${chat.tipo_Chat}, id_otro_usuario: ${chat.id_otro_usuario}, buscando: ${data.userId}`);
+        if (chat.tipo_Chat === 'privado' && chat.id_otro_usuario == data.userId) {
+          console.log(`✏️ [HANDLER] ¡MATCH! Actualizando chat: ${chat.nombre_Chat_display} con emoji: ${data.iconEmoji}`);
+          return {
+            ...chat,
+            otherUserIcon: data.iconEmoji
+          };
+        }
+        return chat;
+      });
+      console.log('✅ [HANDLER] Chats actualizados:', updated.length);
+      return updated;
+    });
+
+    // Actualizar usuarios
+    setAllUsers(prevUsers => {
+      console.log('🔄 [HANDLER] Usuarios antes de actualizar:', prevUsers.length);
+      const updated = prevUsers.map(u => {
+        console.log(`🔍 [HANDLER] Verificando usuario: ${u.nombre_Usuario}, id: ${u.id_Usuario}, buscando: ${data.userId}`);
+        if (u.id_Usuario == data.userId) {
+          console.log(`✏️ [HANDLER] ¡MATCH! Actualizando usuario: ${u.nombre_Usuario} con emoji: ${data.iconEmoji}`);
+          return { ...u, IconoPerfil: data.iconEmoji };
+        }
+        return u;
+      });
+      console.log('✅ [HANDLER] Usuarios actualizados:', updated.length);
+      return updated;
+    });
+  };
+
+  const handleIconUnequipped = (data) => {
+    testEventReceived('icon_unequipped');
+    console.log('🔄 [HANDLER] handleIconUnequipped ejecutado:', data);
+    
+    setChats(prevChats => 
+      prevChats.map(chat => {
+        if (chat.tipo_Chat === 'privado' && chat.id_otro_usuario == data.userId) {
+          console.log(`✏️ [HANDLER] Desequipando icono en chat: ${chat.nombre_Chat_display}`);
+          return {
+            ...chat,
+            otherUserIcon: 'default_avatar.png'
+          };
+        }
+        return chat;
+      })
+    );
+
+    setAllUsers(prevUsers =>
+      prevUsers.map(u => {
+        if (u.id_Usuario == data.userId) {
+          console.log(`✏️ [HANDLER] Desequipando icono de usuario: ${u.nombre_Usuario}`);
+          return { ...u, IconoPerfil: 'default_avatar.png' };
+        }
+        return u;
+      })
+    );
+  };
+
+  const handleUserOnline = (data) => {
+    testEventReceived('user:online');
+    console.log('🟢 [HANDLER] handleUserOnline ejecutado:', data);
+    
+    setChats(prevChats => 
+      prevChats.map(chat => {
+        if (chat.tipo_Chat === 'privado' && chat.id_otro_usuario == data.userId) {
+          console.log(`✏️ [HANDLER] Usuario ${data.userName} online en chat: ${chat.nombre_Chat_display}`);
+          return {
+            ...chat,
+            otherUserOnline: true
+          };
+        }
+        return chat;
+      })
+    );
+
+    setAllUsers(prevUsers =>
+      prevUsers.map(u => {
+        if (u.id_Usuario == data.userId) {
+          console.log(`✏️ [HANDLER] Usuario ${data.userName} online`);
+          return { ...u, Estado: 1 };
+        }
+        return u;
+      })
+    );
+  };
+
+  const handleUserOffline = (data) => {
+    testEventReceived('user:offline');
+    console.log('🔴 [HANDLER] handleUserOffline ejecutado:', data);
+    
+    setChats(prevChats => 
+      prevChats.map(chat => {
+        if (chat.tipo_Chat === 'privado' && chat.id_otro_usuario == data.userId) {
+          console.log(`✏️ [HANDLER] Usuario ${data.userName} offline en chat: ${chat.nombre_Chat_display}`);
+          return {
+            ...chat,
+            otherUserOnline: false
+          };
+        }
+        return chat;
+      })
+    );
+
+    setAllUsers(prevUsers =>
+      prevUsers.map(u => {
+        if (u.id_Usuario == data.userId) {
+          console.log(`✏️ [HANDLER] Usuario ${data.userName} offline`);
+          return { ...u, Estado: 0 };
+        }
+        return u;
+      })
+    );
+  };
+
+  // ============================================
+  // REGISTRAR LISTENERS CON TIMEOUT
+  // ============================================
+  
+  // Pequeño delay para asegurar que el socket esté 100% listo
+  const timeoutId = setTimeout(() => {
+    console.log('📝 [Dashboard] Iniciando registro de listeners...');
+    
+    onGlobalEvent('icon_equipped', handleIconEquipped);
+    console.log('✅ Listener registrado: icon_equipped');
+    
+    onGlobalEvent('icon_unequipped', handleIconUnequipped);
+    console.log('✅ Listener registrado: icon_unequipped');
+    
+    onGlobalEvent('user:online', handleUserOnline);
+    console.log('✅ Listener registrado: user:online');
+    
+    onGlobalEvent('user:offline', handleUserOffline);
+    console.log('✅ Listener registrado: user:offline');
+    
+    console.log('🎉 [Dashboard] Todos los listeners registrados correctamente');
+  }, 100); // 100ms de delay
+
+  // ============================================
+  // CLEANUP
+  // ============================================
+  return () => {
+    clearTimeout(timeoutId);
+    console.log('🧹 [Dashboard] Limpiando listeners de iconos y estados');
+    offGlobalEvent('icon_equipped');
+    offGlobalEvent('icon_unequipped');
+    offGlobalEvent('user:online');
+    offGlobalEvent('user:offline');
+  };
+}, [isConnected, onGlobalEvent, offGlobalEvent]); 
+
 
   // 1. Mostrar estado de conexión en consola
   useEffect(() => {
@@ -1710,7 +1885,7 @@ const handleBuyIcon = async (icon) => {
 //Manejar equipar un icono
 const handleEquipIcon = async (icon) => {
   try {
-    console.log('⚡ Equipando icono:', icon);
+    //console.log('⚡ Equipando icono:', icon);
     
     const response = await tiendaService.equiparIcono(icon.id_Icono);
     
@@ -1740,6 +1915,17 @@ const handleEquipIcon = async (icon) => {
       // Recargar iconos para actualizar el estado equipado
       await loadUserIcons();
       
+      // Emitir evento WebSocket
+      if (isConnected) {
+        sendSocketMessage({
+          type: 'icon_equipped',
+          userId: currentUserId,
+          userName: userName,
+          iconEmoji: response.data.emoji_equipado,
+          iconName: icon.nombre
+        });
+      }
+      
     } else {
       showAlertMessage(response.message || 'Error al equipar el icono');
     }
@@ -1753,7 +1939,7 @@ const handleEquipIcon = async (icon) => {
  //Manejar desequipar el icono actual
 const handleUnequipIcon = async () => {
   try {
-    console.log('🔄 Desequipando icono...');
+    //console.log('🔄 Desequipando icono...');
     
     const response = await tiendaService.desequiparIcono();
     
@@ -1776,7 +1962,16 @@ const handleUnequipIcon = async () => {
       
       // Recargar iconos
       await loadUserIcons();
-      
+
+      // Emitir evento WebSocket
+      if (isConnected) {
+        sendSocketMessage({
+          type: 'icon_unequipped',
+          userId: currentUserId,
+          userName: userName
+        });
+      }
+
     } else {
       showAlertMessage(response.message || 'Error al desequipar');
     }
@@ -2408,12 +2603,13 @@ const handleFinalizarQuiniela = async () => {
                 <Settings className="w-6 h-6" />
               </button>
 
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                  <User className="w-5 h-5 text-white" />
-                </div>
-                <span className="font-semibold text-gray-800">{userName}</span>
-              </div>
+<div className="flex items-center space-x-2">
+  <Avatar 
+    iconoPerfil={user.IconoPerfil} 
+    size="md"
+  />
+  <span className="font-semibold text-gray-800">{userName}</span>
+</div>
 
               <button
                 onClick={onLogout}
@@ -2481,29 +2677,46 @@ const handleFinalizarQuiniela = async () => {
                       selectedChat?.id_Chat === chat.id_Chat ? "bg-blue-50" : ""
                     }`}
                   >
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="text-white text-lg">
-                          {chat.tipo_Chat === "grupal" ? "👥" : "👤"}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="font-semibold text-gray-800 truncate">
-                            {chat.nombre_Chat_display ||
-                              chat.nombre_Chat ||
-                              "Chat Privado"}
-                          </h3>
-                          <span className="text-xs text-gray-500">
-                            {chat.tipo_Chat === "grupal" &&
-                              `${chat.total_participantes || 0} 👥`}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 truncate">
-                          {chat.ultimo_mensaje || "Sin mensajes"}
-                        </p>
-                      </div>
-                    </div>
+<div className="flex items-center space-x-3">
+  <div className="relative flex-shrink-0">
+    {chat.tipo_Chat === "privado" ? (
+      // CHAT PRIVADO: Mostrar avatar del otro usuario con emoji
+      <>
+        <Avatar 
+          iconoPerfil={chat.otherUserIcon} 
+          size="lg"
+        />
+        {/* Indicador de online si está conectado */}
+        {chat.otherUserOnline && (
+          <div className={`absolute bottom-0 right-0 w-3 h-3 border-2 border-white rounded-full ${
+            chat.otherUserOnline ? 'bg-green-500' : 'bg-red-500'
+          }`}></div>
+        )}
+      </>
+    ) : (
+      // CHAT GRUPAL: Mantener icono de grupo
+      <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+        <span className="text-white text-lg">👥</span>
+      </div>
+    )}
+  </div>
+  <div className="flex-1 min-w-0">
+    <div className="flex items-center justify-between mb-1">
+      <h3 className="font-semibold text-gray-800 truncate">
+        {chat.nombre_Chat_display ||
+          chat.nombre_Chat ||
+          "Chat Privado"}
+      </h3>
+      <span className="text-xs text-gray-500">
+        {chat.tipo_Chat === "grupal" &&
+          `${chat.total_participantes || 0} 👥`}
+      </span>
+    </div>
+    <p className="text-sm text-gray-600 truncate">
+      {chat.ultimo_mensaje || "Sin mensajes"}
+    </p>
+  </div>
+</div>
                   </button>
                 ))
             )}

@@ -70,11 +70,12 @@ class Chat {
      * @param int $id_Usuario
      * @return array
      */
-    public function obtenerChatsPorUsuario($id_Usuario) {
+public function obtenerChatsPorUsuario($id_Usuario) {
     $query = "SELECT c.*, 
               COUNT(DISTINCT pc.id_Usuario) as total_participantes,
               (SELECT COUNT(*) FROM " . $this->table_mensajes . " WHERE id_Chat = c.id_Chat) as total_mensajes,
               (SELECT mensaje FROM " . $this->table_mensajes . " WHERE id_Chat = c.id_Chat ORDER BY id_Mensaje DESC LIMIT 1) as ultimo_mensaje,
+              
               -- Si es chat privado, obtener el nombre del otro usuario
               CASE 
                   WHEN c.tipo_Chat = 'privado' THEN
@@ -86,6 +87,7 @@ class Chat {
                        LIMIT 1)
                   ELSE c.nombre_Chat
               END as nombre_Chat_display,
+              
               -- Obtener el ID del otro usuario en caso de chat privado
               CASE 
                   WHEN c.tipo_Chat = 'privado' THEN
@@ -95,17 +97,44 @@ class Chat {
                        AND pc2.id_Usuario != :id_Usuario2
                        LIMIT 1)
                   ELSE NULL
-              END as id_otro_usuario
+              END as id_otro_usuario,
+              
+              -- Obtener el IconoPerfil del otro usuario en chats privados
+              CASE 
+                  WHEN c.tipo_Chat = 'privado' THEN
+                      (SELECT u.IconoPerfil 
+                       FROM Usuario u
+                       INNER JOIN " . $this->table_participantes . " pc2 ON u.id_Usuario = pc2.id_Usuario
+                       WHERE pc2.id_Chat = c.id_Chat 
+                       AND pc2.id_Usuario != :id_Usuario4
+                       LIMIT 1)
+                  ELSE NULL
+              END as otherUserIcon,
+              
+              -- Verificar si el otro usuario está online (Estado = 1)
+              CASE 
+                  WHEN c.tipo_Chat = 'privado' THEN
+                      (SELECT u.Estado 
+                       FROM Usuario u
+                       INNER JOIN " . $this->table_participantes . " pc2 ON u.id_Usuario = pc2.id_Usuario
+                       WHERE pc2.id_Chat = c.id_Chat 
+                       AND pc2.id_Usuario != :id_Usuario5
+                       LIMIT 1)
+                  ELSE 0
+              END as otherUserOnline
+              
               FROM " . $this->table_chats . " c
               INNER JOIN " . $this->table_participantes . " pc ON c.id_Chat = pc.id_Chat
-              WHERE pc.id_Usuario = :id_Usuario3 AND c.activo = 1
+              WHERE pc.id_Usuario = :id_Usuario6 AND c.activo = 1
               GROUP BY c.id_Chat
               ORDER BY c.id_Chat DESC";
 
     $stmt = $this->conn->prepare($query);
     $stmt->bindParam(":id_Usuario", $id_Usuario);
     $stmt->bindParam(":id_Usuario2", $id_Usuario);
-    $stmt->bindParam(":id_Usuario3", $id_Usuario);
+    $stmt->bindParam(":id_Usuario4", $id_Usuario);
+    $stmt->bindParam(":id_Usuario5", $id_Usuario);
+    $stmt->bindParam(":id_Usuario6", $id_Usuario);
     $stmt->execute();
 
     return $stmt->fetchAll(PDO::FETCH_ASSOC);

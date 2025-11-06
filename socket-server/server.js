@@ -141,6 +141,29 @@ socket.on('message:send', (messageData) => {
     socket.to(`chat_${chatId}`).emit('user:stop-typing', { chatId });
   });
 
+// Cuando un usuario equipa un icono
+socket.on('icon_equipped', (data) => {
+  console.log('🎨 Broadcasting icon equipped:', data);
+  
+  // Emitir a todos los usuarios conectados
+  io.emit('icon_equipped', {
+    userId: data.userId,
+    userName: data.userName,
+    iconEmoji: data.iconEmoji,
+    iconName: data.iconName
+  });
+});
+
+// Cuando un usuario desequipa un icono
+socket.on('icon_unequipped', (data) => {
+  console.log('🔄 Broadcasting icon unequipped:', data);
+  
+  // Emitir a todos los usuarios conectados
+  io.emit('icon_unequipped', {
+    userId: data.userId,
+    userName: data.userName
+  });
+});
   // Cuando un cliente se desconecta
   socket.on('disconnect', () => {
     const userData = userSockets.get(socket.id);
