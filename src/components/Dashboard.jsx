@@ -1311,189 +1311,70 @@ const [loadingShop, setLoadingShop] = useState(false);
     joinChat,
     leaveChat,
     sendMessage: sendSocketMessage,
+    emitIconUpdate,
     onMessageReceived,
     offMessageReceived,
     onGlobalEvent,
     offGlobalEvent,
   } = useSocket(currentUserId, userName);
 
-// Escuchar cambios de iconos y estados de usuarios
+// Escuchar cambios de iconos y estados de usuarios 
 useEffect(() => {
-  // ✅ Verificar que el socket esté realmente conectado
   if (!isConnected) {
-    console.log('⚠️ [Dashboard] Socket no conectado aún, esperando...');
+    console.log('⚠️ [Dashboard-Icons] Socket no conectado, esperando...');
     return;
   }
 
-  console.log('✅ [Dashboard] Socket conectado, registrando listeners...');
+  console.log('🎨 [Dashboard-Icons] Registrando listener de iconos...');
 
-  // Función auxiliar para verificar si el evento se recibe
-  const testEventReceived = (eventName) => {
-    console.log(`🎯 [Dashboard] Evento ${eventName} RECIBIDO en el socket`);
-  };
+  // Handler único para actualizaciones de iconos
+  const handleIconUpdate = (data) => {
+    console.log('🔔 [Dashboard-Icons] Actualización de icono recibida:', data);
+    console.log('📊 [Dashboard-Icons] userId:', data.userId, 'iconoPerfil:', data.iconoPerfil);
 
-  // ============================================
-  // HANDLERS
-  // ============================================
-  
-  const handleIconEquipped = (data) => {
-    testEventReceived('icon_equipped');
-    console.log('🎨 [HANDLER] handleIconEquipped ejecutado:', data);
-    console.log('📊 [HANDLER] Data recibida completa:', JSON.stringify(data, null, 2));
-    
-    // Actualizar chats
+    // Actualizar en la lista de chats
     setChats(prevChats => {
-      console.log('🔄 [HANDLER] Chats antes de actualizar:', prevChats.length);
+      console.log('🔄 [Dashboard-Icons] Actualizando chats...');
       const updated = prevChats.map(chat => {
-        console.log(`🔍 [HANDLER] Verificando chat: ${chat.nombre_Chat_display}, tipo: ${chat.tipo_Chat}, id_otro_usuario: ${chat.id_otro_usuario}, buscando: ${data.userId}`);
         if (chat.tipo_Chat === 'privado' && chat.id_otro_usuario == data.userId) {
-          console.log(`✏️ [HANDLER] ¡MATCH! Actualizando chat: ${chat.nombre_Chat_display} con emoji: ${data.iconEmoji}`);
+          console.log(`✏️ [Dashboard-Icons] Actualizando chat con ${data.userName}: ${data.iconoPerfil}`);
           return {
             ...chat,
-            otherUserIcon: data.iconEmoji
+            otherUserIcon: data.iconoPerfil
           };
         }
         return chat;
       });
-      console.log('✅ [HANDLER] Chats actualizados:', updated.length);
       return updated;
     });
 
-    // Actualizar usuarios
+    // Actualizar en la lista de usuarios
     setAllUsers(prevUsers => {
-      console.log('🔄 [HANDLER] Usuarios antes de actualizar:', prevUsers.length);
+      console.log('🔄 [Dashboard-Icons] Actualizando lista de usuarios...');
       const updated = prevUsers.map(u => {
-        console.log(`🔍 [HANDLER] Verificando usuario: ${u.nombre_Usuario}, id: ${u.id_Usuario}, buscando: ${data.userId}`);
         if (u.id_Usuario == data.userId) {
-          console.log(`✏️ [HANDLER] ¡MATCH! Actualizando usuario: ${u.nombre_Usuario} con emoji: ${data.iconEmoji}`);
-          return { ...u, IconoPerfil: data.iconEmoji };
+          console.log(`✏️ [Dashboard-Icons] Actualizando usuario ${u.nombre_Usuario}: ${data.iconoPerfil}`);
+          return { 
+            ...u, 
+            IconoPerfil: data.iconoPerfil 
+          };
         }
         return u;
       });
-      console.log('✅ [HANDLER] Usuarios actualizados:', updated.length);
       return updated;
     });
   };
 
-  const handleIconUnequipped = (data) => {
-    testEventReceived('icon_unequipped');
-    console.log('🔄 [HANDLER] handleIconUnequipped ejecutado:', data);
-    
-    setChats(prevChats => 
-      prevChats.map(chat => {
-        if (chat.tipo_Chat === 'privado' && chat.id_otro_usuario == data.userId) {
-          console.log(`✏️ [HANDLER] Desequipando icono en chat: ${chat.nombre_Chat_display}`);
-          return {
-            ...chat,
-            otherUserIcon: 'default_avatar.png'
-          };
-        }
-        return chat;
-      })
-    );
+  // Registrar listener
+  onGlobalEvent('user:icon:update', handleIconUpdate);
+  console.log('✅ [Dashboard-Icons] Listener user:icon:update registrado');
 
-    setAllUsers(prevUsers =>
-      prevUsers.map(u => {
-        if (u.id_Usuario == data.userId) {
-          console.log(`✏️ [HANDLER] Desequipando icono de usuario: ${u.nombre_Usuario}`);
-          return { ...u, IconoPerfil: 'default_avatar.png' };
-        }
-        return u;
-      })
-    );
-  };
-
-  const handleUserOnline = (data) => {
-    testEventReceived('user:online');
-    console.log('🟢 [HANDLER] handleUserOnline ejecutado:', data);
-    
-    setChats(prevChats => 
-      prevChats.map(chat => {
-        if (chat.tipo_Chat === 'privado' && chat.id_otro_usuario == data.userId) {
-          console.log(`✏️ [HANDLER] Usuario ${data.userName} online en chat: ${chat.nombre_Chat_display}`);
-          return {
-            ...chat,
-            otherUserOnline: true
-          };
-        }
-        return chat;
-      })
-    );
-
-    setAllUsers(prevUsers =>
-      prevUsers.map(u => {
-        if (u.id_Usuario == data.userId) {
-          console.log(`✏️ [HANDLER] Usuario ${data.userName} online`);
-          return { ...u, Estado: 1 };
-        }
-        return u;
-      })
-    );
-  };
-
-  const handleUserOffline = (data) => {
-    testEventReceived('user:offline');
-    console.log('🔴 [HANDLER] handleUserOffline ejecutado:', data);
-    
-    setChats(prevChats => 
-      prevChats.map(chat => {
-        if (chat.tipo_Chat === 'privado' && chat.id_otro_usuario == data.userId) {
-          console.log(`✏️ [HANDLER] Usuario ${data.userName} offline en chat: ${chat.nombre_Chat_display}`);
-          return {
-            ...chat,
-            otherUserOnline: false
-          };
-        }
-        return chat;
-      })
-    );
-
-    setAllUsers(prevUsers =>
-      prevUsers.map(u => {
-        if (u.id_Usuario == data.userId) {
-          console.log(`✏️ [HANDLER] Usuario ${data.userName} offline`);
-          return { ...u, Estado: 0 };
-        }
-        return u;
-      })
-    );
-  };
-
-  // ============================================
-  // REGISTRAR LISTENERS CON TIMEOUT
-  // ============================================
-  
-  // Pequeño delay para asegurar que el socket esté 100% listo
-  const timeoutId = setTimeout(() => {
-    console.log('📝 [Dashboard] Iniciando registro de listeners...');
-    
-    onGlobalEvent('icon_equipped', handleIconEquipped);
-    console.log('✅ Listener registrado: icon_equipped');
-    
-    onGlobalEvent('icon_unequipped', handleIconUnequipped);
-    console.log('✅ Listener registrado: icon_unequipped');
-    
-    onGlobalEvent('user:online', handleUserOnline);
-    console.log('✅ Listener registrado: user:online');
-    
-    onGlobalEvent('user:offline', handleUserOffline);
-    console.log('✅ Listener registrado: user:offline');
-    
-    console.log('🎉 [Dashboard] Todos los listeners registrados correctamente');
-  }, 100); // 100ms de delay
-
-  // ============================================
-  // CLEANUP
-  // ============================================
+  // Cleanup
   return () => {
-    clearTimeout(timeoutId);
-    console.log('🧹 [Dashboard] Limpiando listeners de iconos y estados');
-    offGlobalEvent('icon_equipped');
-    offGlobalEvent('icon_unequipped');
-    offGlobalEvent('user:online');
-    offGlobalEvent('user:offline');
+    console.log('🧹 [Dashboard-Icons] Limpiando listener de iconos');
+    offGlobalEvent('user:icon:update');
   };
-}, [isConnected, onGlobalEvent, offGlobalEvent]); 
+}, [isConnected, onGlobalEvent, offGlobalEvent]);
 
 
   // 1. Mostrar estado de conexión en consola
@@ -1885,45 +1766,52 @@ const handleBuyIcon = async (icon) => {
 //Manejar equipar un icono
 const handleEquipIcon = async (icon) => {
   try {
-    //console.log('⚡ Equipando icono:', icon);
+    console.log('⚡ [handleEquipIcon] Equipando icono:', icon);
     
     const response = await tiendaService.equiparIcono(icon.id_Icono);
     
     if (response.success) {
       showAlertMessage(`¡${icon.nombre} equipado! ✨`);
       
+      const nuevoIcono = response.data.emoji_equipado;
+      
       // Actualizar icono equipado
       setEquippedIcon({
         id_Icono: icon.id_Icono,
-        emoji: response.data.emoji_equipado,
+        emoji: nuevoIcono,
         nombre: icon.nombre
       });
       
       // Actualizar usuario con el nuevo icono
       setUser(prev => ({
         ...prev,
-        IconoPerfil: response.data.emoji_equipado
+        IconoPerfil: nuevoIcono
       }));
       
       // Actualizar localStorage
       const usuarioActualizado = {
         ...user,
-        IconoPerfil: response.data.emoji_equipado
+        IconoPerfil: nuevoIcono
       };
       localStorage.setItem('usuario', JSON.stringify(usuarioActualizado));
       
       // Recargar iconos para actualizar el estado equipado
       await loadUserIcons();
       
-      // Emitir evento WebSocket
-      if (isConnected) {
-        sendSocketMessage({
-          type: 'icon_equipped',
-          userId: currentUserId,
-          userName: userName,
-          iconEmoji: response.data.emoji_equipado,
-          iconName: icon.nombre
-        });
+      // ✅ NUEVO: Emitir actualización de icono
+      console.log('📡 [handleEquipIcon] Verificando conexión...');
+      console.log('   - isConnected:', isConnected);
+      console.log('   - emitIconUpdate:', typeof emitIconUpdate);
+      console.log('   - currentUserId:', currentUserId);
+      console.log('   - userName:', userName);
+      console.log('   - nuevoIcono:', nuevoIcono);
+      
+      if (isConnected && emitIconUpdate) {
+        console.log('📤 [handleEquipIcon] Emitiendo actualización de icono...');
+        emitIconUpdate(currentUserId, userName, nuevoIcono);
+        console.log('✅ [handleEquipIcon] Actualización emitida');
+      } else {
+        console.error('❌ [handleEquipIcon] No se pudo emitir actualización');
       }
       
     } else {
@@ -1937,9 +1825,9 @@ const handleEquipIcon = async (icon) => {
 };
 
  //Manejar desequipar el icono actual
-const handleUnequipIcon = async () => {
+ const handleUnequipIcon = async () => {
   try {
-    //console.log('🔄 Desequipando icono...');
+    console.log('🔄 [handleUnequipIcon] Desequipando icono...');
     
     const response = await tiendaService.desequiparIcono();
     
@@ -1962,16 +1850,20 @@ const handleUnequipIcon = async () => {
       
       // Recargar iconos
       await loadUserIcons();
-
-      // Emitir evento WebSocket
-      if (isConnected) {
-        sendSocketMessage({
-          type: 'icon_unequipped',
-          userId: currentUserId,
-          userName: userName
-        });
+      
+      // ✅ NUEVO: Emitir actualización de icono
+      console.log('📡 [handleUnequipIcon] Verificando conexión...');
+      console.log('   - isConnected:', isConnected);
+      console.log('   - emitIconUpdate:', typeof emitIconUpdate);
+      
+      if (isConnected && emitIconUpdate) {
+        console.log('📤 [handleUnequipIcon] Emitiendo desequipado...');
+        emitIconUpdate(currentUserId, userName, 'default_avatar.png');
+        console.log('✅ [handleUnequipIcon] Actualización emitida');
+      } else {
+        console.error('❌ [handleUnequipIcon] No se pudo emitir actualización');
       }
-
+      
     } else {
       showAlertMessage(response.message || 'Error al desequipar');
     }

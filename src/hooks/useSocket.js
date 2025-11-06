@@ -113,7 +113,6 @@ export const useSocket = (userId, userName) => {
       socket.onAny((eventName, ...args) => {
     console.log(`🔔 [DEBUG] Evento recibido:`, eventName, args);
   });
-  
     // ===============================
     // CLEANUP AL DESMONTAR
     // ===============================
@@ -221,6 +220,31 @@ const sendSocketMessage = (messageData) => {
   }
 };
 
+// Función específica para emitir cambios de icono
+const emitIconUpdate = (userId, userName, iconoPerfil) => {
+  if (socketRef.current && isConnected) {
+    console.log('🎨 [useSocket] Emitiendo actualización de icono:', {
+      userId,
+      userName,
+      iconoPerfil
+    });
+    
+    socketRef.current.emit('user:icon:update', {
+      userId,
+      userName,
+      iconoPerfil
+    });
+    
+    console.log('✅ [useSocket] Evento user:icon:update emitido');
+  } else {
+    console.error('❌ [useSocket] No se pudo emitir - Socket no conectado');
+    console.log('Socket state:', {
+      exists: !!socketRef.current,
+      connected: isConnected
+    });
+  }
+};
+
   return {
     socket: socketRef.current,
     isConnected,
@@ -230,6 +254,7 @@ const sendSocketMessage = (messageData) => {
     leaveChat,
     sendMessage,
     sendSocketMessage,
+    emitIconUpdate,
     onMessageReceived,
     offMessageReceived,
     notifyTyping,
