@@ -35,6 +35,9 @@ class Mensaje {
         $nombre_Archivo = null,
         $tamano_Archivo = null
     ) {
+        // Importar clase de encriptación
+        require_once __DIR__ . '/../utils/Encryption.php';
+
         $query = "INSERT INTO " . $this->table_name . " 
                   (id_Chat, id_Remitente, mensaje, encriptado, tipo_Mensaje, url_Archivo, nombre_Archivo, tamano_Archivo) 
                   VALUES 
@@ -45,6 +48,13 @@ class Mensaje {
         // Limpiar datos
         $id_Chat = htmlspecialchars(strip_tags($id_Chat));
         $id_Remitente = htmlspecialchars(strip_tags($id_Remitente));
+        
+        // Encriptar el mensaje si está habilitado y es tipo texto
+        if ($encriptado && $tipo_Mensaje === 'texto') {
+            $mensaje = Encryption::encrypt($mensaje);
+            error_log("🔒 Mensaje encriptado: " . substr($mensaje, 0, 50) . "...");
+        }
+        
         $mensaje = htmlspecialchars(strip_tags($mensaje));
         $encriptado = $encriptado ? 1 : 0;
         $tipo_Mensaje = htmlspecialchars(strip_tags($tipo_Mensaje));
@@ -74,13 +84,16 @@ class Mensaje {
      * @return array Array de mensajes
      */
     public function obtenerPorChat($id_Chat, $limite = 50) {
+        // Importar clase de encriptación
+        require_once __DIR__ . '/../utils/Encryption.php';
+
         $query = "SELECT 
                     m.*,
                     u.nombre_Usuario
                   FROM " . $this->table_name . " m
                   INNER JOIN Usuario u ON m.id_Remitente = u.id_Usuario
                   WHERE m.id_Chat = :id_Chat
-                  ORDER BY m.fecha_Hora ASC
+                  ORDER BY m.id_Mensaje ASC
                   LIMIT :limite";
 
         $stmt = $this->conn->prepare($query);
@@ -88,7 +101,17 @@ class Mensaje {
         $stmt->bindParam(':limite', $limite, PDO::PARAM_INT);
         $stmt->execute();
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $mensajes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Desencriptar mensajes encriptados
+        foreach ($mensajes as &$mensaje) {
+            if ($mensaje['encriptado'] == 1 && $mensaje['tipo_Mensaje'] === 'texto') {
+                $mensaje['mensaje'] = Encryption::decrypt($mensaje['mensaje']);
+                error_log("🔓 Mensaje desencriptado para chat " . $id_Chat);
+            }
+        }
+
+        return $mensajes;
     }
 
     /**

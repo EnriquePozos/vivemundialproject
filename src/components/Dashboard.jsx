@@ -984,7 +984,7 @@ if (messageData.type === 'quiniela_finished' && messageData.chatId === chatData.
                                 );
                               } else if (tipoMensaje === "archivo") {
                                 return (
-                                  <div className="flex items-center space-x-3 p-2 bg-opacity-20 bg-black rounded-lg">
+                                  <div className="flex items-center space-x-3 p-2 rounded-lg">
                                     <FileText className="w-8 h-8 flex-shrink-0" />
                                     <div className="flex-1 min-w-0">
                                       <p className="font-semibold truncate">
