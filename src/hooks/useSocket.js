@@ -244,6 +244,30 @@ const emitIconUpdate = (userId, userName, iconoPerfil) => {
     });
   }
 };
+// Función específica para emitir cambios de estado (online/offline)
+const emitStatusUpdate = (userId, userName, estado) => {
+  if (socketRef.current && isConnected) {
+    console.log('🟢 [useSocket] Emitiendo actualización de estado:', {
+      userId,
+      userName,
+      estado: estado === 1 ? 'ONLINE' : 'OFFLINE'
+    });
+    
+    socketRef.current.emit('user:status:update', {
+      userId,
+      userName,
+      estado // 1 = ONLINE, 0 = OFFLINE
+    });
+    
+    console.log('✅ [useSocket] Evento user:status:update emitido');
+  } else {
+    console.error('❌ [useSocket] No se pudo emitir estado - Socket no conectado');
+    console.log('Socket state:', {
+      exists: !!socketRef.current,
+      connected: isConnected
+    });
+  }
+};
 
   return {
     socket: socketRef.current,
@@ -255,6 +279,7 @@ const emitIconUpdate = (userId, userName, iconoPerfil) => {
     sendMessage,
     sendSocketMessage,
     emitIconUpdate,
+    emitStatusUpdate,
     onMessageReceived,
     offMessageReceived,
     notifyTyping,

@@ -155,6 +155,23 @@ socket.on('user:icon:update', (data) => {
   console.log('✅ [SERVER] Evento user:icon:update broadcast completado');
   console.log('👥 [SERVER] Clientes conectados:', io.engine.clientsCount);
 });
+
+// Actualización de Estado de Usuario 
+socket.on('user:status:update', (data) => {
+  console.log('🟢 [SERVER] Usuario actualizó estado:', data);
+  console.log('📊 [SERVER] Data recibida:', JSON.stringify(data, null, 2));
+  
+  // Broadcast a TODOS los clientes conectados
+  io.emit('user:status:update', {
+    userId: data.userId,
+    userName: data.userName,
+    estado: data.estado, // 1 = ONLINE, 0 = OFFLINE
+    timestamp: new Date().toISOString()
+  });
+  
+  console.log(`✅ [SERVER] Evento user:status:update broadcast completado - Usuario ${data.userName} ahora está ${data.estado === 1 ? 'ONLINE' : 'OFFLINE'}`);
+  console.log('👥 [SERVER] Clientes conectados:', io.engine.clientsCount);
+});
   // Cuando un cliente se desconecta
   socket.on('disconnect', () => {
     const userData = userSockets.get(socket.id);

@@ -29,7 +29,7 @@ import {
   FileText,
   Mic,
 } from "lucide-react";
-import { API_ENDPOINTS, chatService, userService } from "../config/api"; // <--- MODIFICACIÓN: Importamos userService
+import { API_ENDPOINTS, chatService, userService, authService } from "../config/api"; // <--- MODIFICACIÓN: Importamos userService
 import videoCallService from "../services/videoCallService";
 import { useSocket } from "../hooks/useSocket";
 import VideoCall from "./VideoCall"; // Componente de videollamadas
@@ -1312,6 +1312,7 @@ const [loadingShop, setLoadingShop] = useState(false);
     leaveChat,
     sendMessage: sendSocketMessage,
     emitIconUpdate,
+    emitStatusUpdate,
     onMessageReceived,
     offMessageReceived,
     onGlobalEvent,
@@ -1375,6 +1376,92 @@ useEffect(() => {
     offGlobalEvent('user:icon:update');
   };
 }, [isConnected, onGlobalEvent, offGlobalEvent]);
+ 
+// Escuchar cambios de ESTADO de usuarios 
+useEffect(() => {
+  if (!isConnected) {
+    console.log('⚠️ [Dashboard-Status] Socket no conectado, esperando...');
+    return;
+  }
+
+  console.log('🟢 [Dashboard-Status] Registrando listener de estados...');
+
+  // Handler único para actualizaciones de estado
+  const handleStatusUpdate = (data) => {
+    console.log('🔔 [Dashboard-Status] Actualización de estado recibida:', data);
+    console.log('📊 [Dashboard-Status] userId:', data.userId, 'estado:', data.estado === 1 ? 'ONLINE' : 'OFFLINE');
+
+    const isOnline = data.estado === 1;
+
+    // Actualizar en la lista de chats
+    setChats(prevChats => {
+      console.log('🔄 [Dashboard-Status] Actualizando chats...');
+      const updated = prevChats.map(chat => {
+        if (chat.tipo_Chat === 'privado' && chat.id_otro_usuario == data.userId) {
+          console.log(`✏️ [Dashboard-Status] Actualizando chat con ${data.userName}: ${isOnline ? 'ONLINE' : 'OFFLINE'}`);
+          return {
+            ...chat,
+            otherUserOnline: isOnline
+          };
+        }
+        return chat;
+      });
+      return updated;
+    });
+
+    // Actualizar en la lista de usuarios
+    setAllUsers(prevUsers => {
+      console.log('🔄 [Dashboard-Status] Actualizando lista de usuarios...');
+      const updated = prevUsers.map(u => {
+        if (u.id_Usuario == data.userId) {
+          console.log(`✏️ [Dashboard-Status] Actualizando usuario ${u.nombre_Usuario}: ${isOnline ? 'ONLINE' : 'OFFLINE'}`);
+          return { 
+            ...u, 
+            Estado: data.estado 
+          };
+        }
+        return u;
+      });
+      return updated;
+    });
+  };
+
+  // Registrar listener
+  onGlobalEvent('user:status:update', handleStatusUpdate);
+  console.log('✅ [Dashboard-Status] Listener user:status:update registrado');
+
+  // Cleanup
+  return () => {
+    console.log('🧹 [Dashboard-Status] Limpiando listener de estados');
+    offGlobalEvent('user:status:update');
+  };
+}, [isConnected, onGlobalEvent, offGlobalEvent]);
+ 
+// Marcar usuario como ONLINE al conectarse 
+const hasEmittedOnline = useRef(false); // Bandera para evitar múltiples emisiones
+
+useEffect(() => {
+  const marcarOnline = async () => {
+    // Solo emitir si está conectado Y no se ha emitido antes
+    if (isConnected && currentUserId && userName && !hasEmittedOnline.current) {
+      console.log('🟢 [Dashboard] Marcando usuario como ONLINE...');
+      
+      // Emitir evento WebSocket
+      if (emitStatusUpdate) {
+        emitStatusUpdate(currentUserId, userName, 1);
+        hasEmittedOnline.current = true; // Marcar como emitido
+        console.log('✅ [Dashboard] Evento ONLINE emitido (primera vez)');
+      }
+    }
+  };
+
+  marcarOnline();
+  
+  // Reset de la bandera cuando se desconecta
+  if (!isConnected) {
+    hasEmittedOnline.current = false;
+  }
+}, [isConnected, currentUserId, userName, emitStatusUpdate]);
 
 
   // 1. Mostrar estado de conexión en consola
@@ -2345,6 +2432,30 @@ const handleFinalizarQuiniela = async () => {
       </div>
     </div>
   );
+  
+// Función de logout mejorada 
+const handleLogout = async () => {
+  console.log('🔴 [Dashboard] Cerrando sesión...');
+  
+  try {
+    // 1. Emitir estado OFFLINE via WebSocket
+    if (isConnected && emitStatusUpdate && currentUserId && userName) {
+      emitStatusUpdate(currentUserId, userName, 0);
+      console.log('✅ [Dashboard] Evento OFFLINE emitido');
+    }
+
+    // 2. Llamar al endpoint de logout del backend
+    await authService.logout();
+    console.log('✅ [Dashboard] Sesión cerrada en backend');
+    
+  } catch (error) {
+    console.error('❌ [Dashboard] Error al cerrar sesión:', error);
+  } finally {
+    // 3. Limpiar estado local y redirigir
+    onLogout();
+  }
+};
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -2504,7 +2615,7 @@ const handleFinalizarQuiniela = async () => {
 </div>
 
               <button
-                onClick={onLogout}
+                onClick={handleLogout}
                 className="flex items-center space-x-2 px-3 py-2 text-sm bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
@@ -2581,7 +2692,7 @@ const handleFinalizarQuiniela = async () => {
         {/* Indicador de online si está conectado */}
         {chat.otherUserOnline && (
           <div className={`absolute bottom-0 right-0 w-3 h-3 border-2 border-white rounded-full ${
-            chat.otherUserOnline ? 'bg-green-500' : 'bg-red-500'
+            chat.otherUserOnline === 1 ? 'bg-green-500' : 'bg-green-500'
           }`}></div>
         )}
       </>
